@@ -35,4 +35,9 @@ for (i in 1:length(prov)){
 aveplast
 
 newdat <- data.frame(prov, aveplast)
-newdat
+write.csv(newdat, file="AveragePlasticCount.csv")
+
+# now to rename according to the QGIS shape file
+# BPRL --> BPLR
+# HUMB == CHIL on this map
+# NAST E --> NASE
