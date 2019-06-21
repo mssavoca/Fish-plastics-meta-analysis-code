@@ -13,15 +13,26 @@ head(data2)
 length(table(data2$OceanProv))
 data3<- data2[order(data2$OceanProv),]
 head(data3)
-table(data3)
+table(data3$OceanProv)
 
 ### set up new dataframe 
 prov <- unique(data3$OceanProv)[-1]
+prov
 aveplast <- rep(NA, length(prov)) 
-newdat <- data.frame(prov, aveplast)
+na.omit(data3)
 table(data3$OceanProv)
 
-for (i in 1:nrow(newdat)){
-  
-  
+## using this to double check the produced averages
+sub <- data3[data3$OceanProv=="BRAZ",]
+sub
+mean(sub$PropPlastic) #3 = .1077803
+
+for (i in 1:length(prov)){
+  sub <- data3[data3$OceanProv==prov[i],]
+  aveplast[i] <- mean(sub$PropPlastic)
 }
+
+aveplast
+
+newdat <- data.frame(prov, aveplast)
+newdat
