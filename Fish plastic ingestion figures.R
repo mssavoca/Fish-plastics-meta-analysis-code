@@ -11,9 +11,9 @@ library(lme4)
 library(gamm4)
 library(readxl)
 library(readr)
+library(ggplot2)
 
-
-d = read.csv("Plastics ingestion records fish master_Updated_AGM_MSS.csv") %>% 
+d = read.csv("Plastics ingestion records fish master_UDPATED_AGM-MSS2.csv") %>% 
   mutate(WeightedProp = Prop.w.plastic*N,
          Found = as_factor(case_when(Habitat %in% c("demersal", "reef-associated", "benthopelagic", "bathydemersal") ~ "demersal",
                                   Habitat %in% c("pelagic-neritic", "pelagic-oceanic", "mesopelagic", "bathypelagic") ~ "pelagic")))
@@ -153,6 +153,7 @@ p8
 
 
 
+<<<<<<< HEAD
 # GLMM ----
 glmm_FwP <- glmer(cbind(NwP, N-NwP) ~ `Trophic level via fishbase` + `Average depth`*Found + `Oceanographic province (from Longhurst 2007)` +
                    (1|Source) + (1|Order), data = d1, family = binomial)
@@ -231,11 +232,91 @@ plot(plot.tree, type = "fan", open.angle = 360 - tree.angle, rotate = 270,
 # jumping through hoops to install ggtree
 # if (!requireNamespace("BiocManager", quietly = TRUE))
 #   install.packages("BiocManager")
+=======
+# # GLMM ----
+# glmm_FwP <- glmer(cbind(NwP, N-NwP) ~ `Trophic level via fishbase` + `Average depth`*Found + `Oceanographic province (from Longhurst 2007)` +
+#                    (1|Source) + (1|Order), data = d1, family = binomial)
+# summary(glmm_FwP)
+>>>>>>> 017f2f8348b3b4f5fdf48db6b998d9cda0816ac3
 # 
-# BiocManager::install("ggtree")
-
-library(ggtree)
-    
-try <- ggtree(plot.tree) +
-  geom_text2(aes(subset=!isTip, label=node), hjust=-.3) + geom_tiplab(size = 2)
-try
+# 
+# # trying a gamm ----
+# gamm_FwP <- gamm(Prop.w.plastic*N ~ s(Trophic.level.via.fishbase,k=5)+s(Average.depth, k=5)+Found, 
+#                  random=list(Order=~1), data=d)
+# ### $gam to look at gam effects. $lme to look at random effects.
+# summary(gamm_FwP$gam)
+# plot(gamm_FwP$gam)
+# 
+# 
+# # this seems to be working
+# gamm_lmer_FwP <- gamm4(cbind(NwP, N-NwP) ~ s(Trophic.level.via.fishbase, k=5) + s(Average.depth, k=5) + Habitat, 
+#                        random = ~(1|Order) + (1|Source), data = d, family = binomial)
+# summary(gamm_lmer_FwP$gam)
+# plot(gamm_lmer_FwP$gam)
+# 
+# 
+# # playing with a BRT ----
+# 
+# ## I think this is what I want, check with Steph
+# gbmFwP <- gbm.step(data=d, 
+#                    gbm.x = c(3,6,16,18,27,34), 
+#                    gbm.y = 7,   # this is NwP
+#                    weights = 8,  # weighted by sample size
+#                    family = "poisson", 
+#                    tree.complexity = 5,
+#                    learning.rate = 0.001, bag.fraction = 0.5)
+# summary(gbmFwP)
+# gbm.plot(gbmFwP)
+# 
+# 
+# 
+# 
+# # testing phylogenetic analyses ----
+# library(rotl) #for phylogenetic analyses, get all the species? from Hinchliff et al. 2015 PNAS
+# library(phytools)
+# 
+# 
+# #gets the species names
+# taxa <- d_sp_sum$`Species name`[1:20]  # this is just a subset, will eventually include all species
+# 
+# resolved_names <- tnrs_match_names(taxa)
+# 
+# #plots species
+# my_tree <- tol_induced_subtree(ott_ids = resolved_names$ott_id)
+# plot(my_tree, no.margin=TRUE)
+# 
+# tree<-read.tree(my_tree) # not working, but doesnt seem to matter atm
+# 
+# plot.tree <- compute.brlen(my_tree, method = "Grafen", power = 1/2) #add branch lengths to my tree using the Grafen (1989) method
+# plot.tree <- ladderize(plot.tree, right = TRUE)
+# 
+# tree.angle <- 270
+# tree.start <- 180
+# treeheight <- max(nodeHeights(plot.tree))
+# 
+# # consider adding in colors or bars next
+# 
+# # This tree plots, but has issues
+# plot(plot.tree, type = "fan", open.angle = 360 - tree.angle, rotate = 270, 
+#      root.edge = TRUE, 
+#      show.tip.label = TRUE, label.offset = .36, cex = 0.6, #tip.color = col1, add back in when we have color working
+#      edge.width = 1.5, font = 3, 
+#      x.lim = c(-1 * treeheight, 1.2 * treeheight), 
+#      y.lim = c(-1 * treeheight, 1.2 * treeheight))
+#  
+# 
+# 
+# 
+# ## Trying a plot with ggtree
+# 
+# # jumping through hoops to install ggtree
+# # if (!requireNamespace("BiocManager", quietly = TRUE))
+# #   install.packages("BiocManager")
+# # 
+# # BiocManager::install("ggtree")
+# 
+# library(ggtree)
+#     
+# try <- ggtree(plot.tree) +
+#   geom_text2(aes(subset=!isTip, label=node), hjust=-.3) + geom_tiplab(size = 2)
+# try
