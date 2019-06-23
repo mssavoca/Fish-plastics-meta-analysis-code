@@ -1,6 +1,6 @@
-######################
-#
-######################
+########################################################################################
+# Preliminary visualizations and analyses for marine fish-plastic ingestion meta-analysis
+########################################################################################
 
 # load packages and data ----
 library(tidyverse)
@@ -25,8 +25,8 @@ d1 = read_xlsx("Plastics ingestion records fish master_updated.xlsx") %>%
 
          
 # summary tables ----
-d_sp_summ <- d1 %>% filter(N > 500 & Found == "pelagic") %>% 
-  group_by(`Species name`, Order) %>% 
+d_sp_summ <- d1 %>% group_by(`Species name`, Order) %>%  
+  filter(N > 500 & Found == "pelagic") %>% 
   summarize(Sp_mean = mean(`Prop w plastic`),
             Sample_size = sum(N),
             num_studies = n_distinct(Source)) %>% 
@@ -43,6 +43,13 @@ Fisheries_summ <- d1 %>%
 concern_fish <- d1 %>% 
   group_by(`Species name`) %>% 
   filter(Commercial %in% c("commercial", "highly commercial") & N > 50 & `Prop w plastic` > 0.25)
+
+# geographic summary of data
+Fish_geo_summ <- d1 %>% 
+  group_by(`Oceanographic province (from Longhurst 2007)`) %>% 
+  summarize(num_studies = n_distinct(Source),
+            num_sp = n_distinct(`Species name`),
+            num_ind_studied = sum(N))
 
 
 # preliminary plots ----
@@ -170,7 +177,7 @@ plot(gamm_lmer_FwP$gam)
 # playing with a BRT ----
 
 ## I think this is what I want, check with Steph
-gbmFwP <- gbm.step(data=d, 
+gbmFwP <- gbm.step(data=d1, 
                    gbm.x = c(3,6,16,18,27,34), 
                    gbm.y = 7,   # this is NwP
                    weights = 8,  # weighted by sample size
