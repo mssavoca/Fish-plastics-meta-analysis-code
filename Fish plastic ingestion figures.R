@@ -12,8 +12,9 @@ library(gamm4)
 library(readxl)
 library(readr)
 library(ggplot2)
+library(MCMCglmm)
 
-d = read.csv("Plastics ingestion records fish master_UDPATED_AGM-MSS2.csv") %>% 
+d = read.csv("Plastics ingestion records fish master_updated.csv") %>% 
   mutate(WeightedProp = Prop.w.plastic*N,
          Found = as_factor(case_when(Habitat %in% c("demersal", "reef-associated", "benthopelagic", "bathydemersal") ~ "demersal",
                                   Habitat %in% c("pelagic-neritic", "pelagic-oceanic", "mesopelagic", "bathypelagic") ~ "pelagic")))
@@ -25,8 +26,8 @@ d1 = read_xlsx("Plastics ingestion records fish master_updated.xlsx") %>%
 
          
 # summary tables ----
-d_sp_summ <- d1 %>% group_by(`Species name`, Order) %>%  
-  filter(N > 500 & Found == "pelagic") %>% 
+d_sp_summ <- d1 %>% group_by(`Species name`) %>%  
+#  filter(N > 500 & Found == "pelagic") %>% 
   summarize(Sp_mean = mean(`Prop w plastic`),
             Sample_size = sum(N),
             num_studies = n_distinct(Source)) %>% 
@@ -42,14 +43,15 @@ Fisheries_summ <- d1 %>%
 # fish of concern for humans
 concern_fish <- d1 %>% 
   group_by(`Species name`) %>% 
-  filter(Commercial %in% c("commercial", "highly commercial") & N > 50 & `Prop w plastic` > 0.25)
+  filter(Commercial %in% c("commercial", "highly commercial") & `Prop w plastic` == 0)
 
 # geographic summary of data
 Fish_geo_summ <- d1 %>% 
   group_by(`Oceanographic province (from Longhurst 2007)`) %>% 
   summarize(num_studies = n_distinct(Source),
             num_sp = n_distinct(`Species name`),
-            num_ind_studied = sum(N))
+            num_ind_studied = sum(N),
+            prop_by_region = sum(NwP)/sum(N))
 
 
 # preliminary plots ----
@@ -155,9 +157,21 @@ p8
 
 <<<<<<< HEAD
 # GLMM ----
-glmm_FwP <- glmer(cbind(NwP, N-NwP) ~ `Trophic level via fishbase` + `Average depth`*Found + `Oceanographic province (from Longhurst 2007)` +
-                   (1|Source) + (1|Order), data = d1, family = binomial)
+
+# USING THIS ONE WITH SCALED DEPTH, certified by Gemma
+glmm_FwP <- glmer(cbind(NwP, N-NwP) ~ scale(`Average depth`)*Found + `Trophic level via fishbase` + 
+                    (1|Source) + (1|Order), data = d1, family = binomial)
 summary(glmm_FwP)
+
+
+# MCMC GLMM ----
+MCMCglmm_FwP <- MCMCglmm(Prop.w.plastic ~ scale(Average.depth),
+                         random = ~ Order,
+                         data = d, family = "gaussian",
+                         nitt = 1150, thin = 100, burnin = 150,
+                         pr = TRUE, # To save the posterior mode of for each level or category in your random effect(s) we use pr = TRUE, which saves them in the $Sol part of the model output.
+                         verbose = TRUE)
+
 
 
 # trying a gamm ----
@@ -169,20 +183,24 @@ plot(gamm_FwP$gam)
 
 
 # this seems to be working
-gamm_lmer_FwP <- gamm4(cbind(NwP, N-NwP) ~ s(Trophic.level.via.fishbase, k=5) + s(Average.depth, k=5) + Habitat, 
-                       random = ~(1|Order) + (1|Source), data = d, family = binomial)
-summary(gamm_lmer_FwP$gam)
-plot(gamm_lmer_FwP$gam)
+gamm_lmer_FwP <- gamm4(cbind(NwP, N-NwP) ~ s(Trophic.level.via.fishbase, k=5) + s(Average.depth, k=5) + Found, 
+                        random = ~(1|Order) + (1|Source), data = d, family = binomial)
+# summary(gamm_lmer_FwP$gam)
+# plot(gamm_lmer_FwP$gam)
+
+
+gamm_lmer_FwP <- gam(Prop.w.plastic ~ s(Trophic.level.via.fishbase, k=5) + s(Average.depth, k=5), 
+                      data = subset(d, Found == "pelagic"), family = gaussian)
 
 
 # playing with a BRT ----
 
 ## I think this is what I want, check with Steph
-gbmFwP <- gbm.step(data=d1, 
-                   gbm.x = c(3,6,16,18,27,34), 
-                   gbm.y = 7,   # this is NwP
-                   weights = 8,  # weighted by sample size
-                   family = "poisson", 
+gbmFwP <- gbm.step(data=d, 
+                   gbm.x = c(3,6,16,18,27,35), 
+                   gbm.y = 9,   # this is NwP
+                   #weights = 8,  # weighted by sample size
+                   family = "gaussian", 
                    tree.complexity = 5,
                    learning.rate = 0.001, bag.fraction = 0.5)
 summary(gbmFwP)
@@ -191,7 +209,7 @@ gbm.plot(gbmFwP)
 
 
 
-# testing phylogenetic analyses ----
+ # testing phylogenetic analyses ----
 library(rotl) #for phylogenetic analyses, get all the species? from Hinchliff et al. 2015 PNAS
 library(phytools)
 
