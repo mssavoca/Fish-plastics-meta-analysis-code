@@ -13,6 +13,7 @@ library(readxl)
 library(readr)
 library(ggplot2)
 library(MCMCglmm)
+library(MuMIn)
 
 d = read.csv("Plastics ingestion records fish master_updated.csv") %>% 
   mutate(WeightedProp = Prop.w.plastic*N,
@@ -26,35 +27,57 @@ d1 = read_xlsx("Plastics ingestion records fish master_updated.xlsx") %>%
 
          
 # summary tables ----
-d_sp_summ <- d1 %>% group_by(`Species name`) %>%  
+d_sp_summ <- d %>%
+  group_by(Species.name, Order, Commercial) %>%  
 #  filter(N > 500 & Found == "pelagic") %>% 
-  summarize(Sp_mean = mean(`Prop w plastic`),
+  summarize(Sp_mean = sum(NwP)/sum(N),
             Sample_size = sum(N),
             num_studies = n_distinct(Source)) %>% 
+  drop_na(Order) %>% 
   arrange(-Sp_mean)
 
-Fisheries_summ <- d1 %>% 
-  filter(`Prop w plastic` > 0) %>% 
+Fisheries_summ <- d %>% 
+  #filter(Prop.w.plastic > 0) %>% 
   group_by(Commercial) %>% 
   summarize(Sp_mean = mean(NwP/N),
             Sample_size = sum(N),
-            num_species = n_distinct(`Species name`))
+            num_species = n_distinct(Species.name))
 
 # fish of concern for humans
-concern_fish <- d1 %>% 
-  group_by(`Species name`) %>% 
-  filter(Commercial %in% c("commercial", "highly commercial") & `Prop w plastic` == 0)
+concern_fish <- d %>% 
+  group_by(Species.name) %>% 
+  filter(Commercial == "highly commercial" & 
+           Prop.w.plastic > 0.25 &
+           N > 50)
 
 # geographic summary of data
-Fish_geo_summ <- d1 %>% 
-  group_by(`Oceanographic province (from Longhurst 2007)`) %>% 
+Fish_geo_summ <- d %>% 
+  filter(Oceanographic.province..from.Longhurst.2007. %in% c("CHIN", "KURO", "SUND", "INDE")) %>% 
+  #group_by(Oceanographic.province..from.Longhurst.2007.) %>% 
   summarize(num_studies = n_distinct(Source),
-            num_sp = n_distinct(`Species name`),
+            num_sp = n_distinct(Species.name),
             num_ind_studied = sum(N),
             prop_by_region = sum(NwP)/sum(N))
 
 
 # preliminary plots ----
+
+# risk/interest plot, do color by order, shape by Commercial
+risk_plot <- ggplot(d_sp_summ, aes(log10(Sample_size), Sp_mean)) +
+  geom_point(aes(size = num_studies, color = Order, shape = Commercial), alpha = 0.6) +
+  geom_hline(yintercept = 0.25, linetype="dashed", color = "red") +
+  geom_vline(xintercept = log10(50), linetype="dashed", color = "red") +
+  xlab("Log[Sample Size]") +
+  ylab("Mean Frequency of Occurrence of Plastic Ingestion") +
+  annotate("text", x = c(0.6, 3.8, 0.6, 3.8),
+                         y=c(0.9, 0.9, 0.05, 0.05), 
+           label = c("high incidence, data poor", "high incidence, data rich", 
+                     "low incidence, data poor", "low incidence, data rich")) +
+  theme_classic()
+risk_plot
+
+
+
 p <- ggplot(d1, 
            aes(`Trophic level via fishbase`, `Prop w plastic`, size= N, weight = N)) + 
   geom_point(alpha = 0.4) +  # Eventually add in foraging behavior here 
@@ -137,8 +160,8 @@ p6 <- ggplot(d1,
 p6
 
 
-p7 <- ggplot(filter(d1, `Prime_forage` != "NA"), 
-                aes(`Prime_forage`, `Prop w plastic`)) +
+p7 <- ggplot(filter(d, Prime_forage != "NA"), 
+                aes(Prime_forage, Prop.w.plastic)) +
   geom_jitter() + 
   geom_boxplot(alpha = 0.1, outlier.shape = NA) +
   theme(axis.text.x = element_text(angle = 90, hjust = 1))
@@ -159,10 +182,31 @@ p8
 # GLMM ----
 
 # USING THIS ONE WITH SCALED DEPTH, certified by Gemma
-glmm_FwP <- glmer(cbind(NwP, N-NwP) ~ scale(`Average depth`)*Found + `Trophic level via fishbase` + 
-                    (1|Source) + (1|Order), data = d1, family = binomial)
+d_glmm_full <- d %>% 
+  drop_na(Average.depth, Found, Trophic.level.via.fishbase, Prime_forage)
+
+glmm_FwP <- glmer(cbind(NwP, N-NwP) ~ scale(Average.depth)*Found + Trophic.level.via.fishbase + Prime_forage +
+                  (1|Source) + (1|Order), 
+                  data = d_glmm_full, family = binomial, na.action = "na.fail")
 summary(glmm_FwP)
 
+# multi-model selection using AICc
+GLMM_dredge <- dredge(glmm_FwP)
+GLMM_dredge
+#subset(GLMM_dredge, delta < 4)
+a=model.avg(GLMM_dredge)
+summary(a)
+confint(a) #computes confidence interval
+
+
+glmm_Commerical <- glmer(cbind(NwP, N-NwP) ~ Commercial +
+                    (1|Source) + (1|Order), data = d, family = binomial)
+summary(glmm_Commerical)
+
+
+
+
+# some other analyses
 
 # MCMC GLMM ----
 MCMCglmm_FwP <- MCMCglmm(Prop.w.plastic ~ scale(Average.depth),
@@ -175,8 +219,7 @@ MCMCglmm_FwP <- MCMCglmm(Prop.w.plastic ~ scale(Average.depth),
 
 
 # trying a gamm ----
-gamm_FwP <- gamm(Prop.w.plastic*N ~ s(Trophic.level.via.fishbase,k=5)+s(Average.depth, k=5)+Found, 
-                 random=list(Order=~1), data=d)
+gamm_FwP <- gamm(Prop.w.plastic ~ s(Trophic.level.via.fishbase,k=10)+s(Average.depth, by = Found, k=10) + Found, data=d)
 ### $gam to look at gam effects. $lme to look at random effects.
 summary(gamm_FwP$gam)
 plot(gamm_FwP$gam)
