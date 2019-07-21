@@ -28,13 +28,22 @@ d1 = read_xlsx("Plastics ingestion records fish master_updated.xlsx") %>%
          
 # summary tables ----
 d_sp_summ <- d %>%
-  group_by(Species.name, Order, Commercial) %>%  
+#  group_by(IUCN.status) %>%  
 #  filter(N > 500 & Found == "pelagic") %>% 
-  summarize(Sp_mean = sum(NwP)/sum(N),
+  drop_na(Vulnerability.score..via.fishbase.from.Cheug.et.al.2005.) %>% 
+  mutate(Vulnerability.category = cut(Vulnerability.score..via.fishbase.from.Cheug.et.al.2005.,
+                                      breaks=c(-Inf, 20, 40, 60, 80, Inf), 
+                                      labels=c("low","low-moderate", "moderate-high", "high-very high", "very high"))) %>% 
+  group_by(Prop.w.plastic, Species.name, Vulnerability.category, Vulnerability.score..via.fishbase.from.Cheug.et.al.2005., IUCN.status) %>%  
+  summarize(Cat_mean = sum(NwP)/sum(N),
             Sample_size = sum(N),
+            num_sp = n_distinct(Species.name), 
             num_studies = n_distinct(Source)) %>% 
-  drop_na(Order) %>% 
-  arrange(-Sp_mean)
+  #drop_na(IUCN.status) %>% 
+  filter(Vulnerability.category %in% c("moderate-high", "high-very high", "very high") & 
+           IUCN.status %in% c("VU", "EN", "CR") & 
+           Prop.w.plastic > 0.25)
+
 
 Fisheries_summ <- d %>% 
   #filter(Prop.w.plastic > 0) %>% 
@@ -52,8 +61,8 @@ concern_fish <- d %>%
 
 # geographic summary of data
 Fish_geo_summ <- d %>% 
-  filter(Oceanographic.province..from.Longhurst.2007. %in% c("CHIN", "KURO", "SUND", "INDE")) %>% 
-  #group_by(Oceanographic.province..from.Longhurst.2007.) %>% 
+  #filter(Oceanographic.province..from.Longhurst.2007. %in% c("CHIN", "KURO", "SUND", "INDE")) %>% 
+  group_by(Oceanographic.province..from.Longhurst.2007.) %>% 
   summarize(num_studies = n_distinct(Source),
             num_sp = n_distinct(Species.name),
             num_ind_studied = sum(N),
@@ -148,8 +157,8 @@ p5 <- ggplot(d, aes(Order, Prop.w.plastic)) +
 p5
 
 
-p6 <- ggplot(d1, 
-             aes(`Vulnerability score (via fishbase from Cheug et al 2005)`, `Prop w plastic`,
+p6 <- ggplot(d, 
+             aes(Vulnerability.score..via.fishbase.from.Cheug.et.al.2005., Prop.w.plastic,
                  weight = N)) +
   geom_point() + 
   geom_smooth(method = "lm") +
@@ -176,7 +185,12 @@ p8 <- ggplot(filter(d1, `Commercial` != "NA"),
 p8
 
 
-
+p9 <- ggplot(filter(d, IUCN.status != "NA"), 
+             aes(IUCN.status, Prop.w.plastic)) +
+  geom_jitter() + 
+  geom_boxplot(alpha = 0.1, outlier.shape = NA) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+p9
 
 <<<<<<< HEAD
 # GLMM ----
@@ -189,6 +203,8 @@ glmm_FwP <- glmer(cbind(NwP, N-NwP) ~ scale(Average.depth)*Found + Trophic.level
                   (1|Source) + (1|Order), 
                   data = d_glmm_full, family = binomial, na.action = "na.fail")
 summary(glmm_FwP)
+confint(ranef(glmm_FwP), method="Wald")
+ranef(glmm_FwP)
 
 # multi-model selection using AICc
 GLMM_dredge <- dredge(glmm_FwP)
@@ -196,6 +212,7 @@ GLMM_dredge
 #subset(GLMM_dredge, delta < 4)
 a=model.avg(GLMM_dredge)
 summary(a)
+
 confint(a) #computes confidence interval
 
 
@@ -209,9 +226,9 @@ summary(glmm_Commerical)
 # some other analyses
 
 # MCMC GLMM ----
-MCMCglmm_FwP <- MCMCglmm(Prop.w.plastic ~ scale(Average.depth),
+MCMCglmm_FwP <- MCMCglmm(log(Prop.w.plastic) ~ scale(Average.depth)*Found + Trophic.level.via.fishbase + Prime_forage,
                          random = ~ Order,
-                         data = d, family = "gaussian",
+                         data = d_glmm_full, family = "gaussian",
                          nitt = 1150, thin = 100, burnin = 150,
                          pr = TRUE, # To save the posterior mode of for each level or category in your random effect(s) we use pr = TRUE, which saves them in the $Sol part of the model output.
                          verbose = TRUE)
@@ -226,14 +243,24 @@ plot(gamm_FwP$gam)
 
 
 # this seems to be working
-gamm_lmer_FwP <- gamm4(cbind(NwP, N-NwP) ~ s(Trophic.level.via.fishbase, k=5) + s(Average.depth, k=5) + Found, 
-                        random = ~(1|Order) + (1|Source), data = d, family = binomial)
-# summary(gamm_lmer_FwP$gam)
-# plot(gamm_lmer_FwP$gam)
+gamm_lmer_FwP_w_conditional <- gamm4(cbind(NwP, N-NwP) ~ s(Trophic.level.via.fishbase) + s(Average.depth, by = Found) + Found + Prime_forage, 
+                        random = ~(1|Order) + (1|Source), data = d_glmm_full, family = binomial)
+summary(gamm_lmer_FwP$gam)
+plot(gamm_lmer_FwP$gam)
+
+GAMM_dredge <- dredge(gamm_lmer_FwP_w_conditional)
 
 
-gamm_lmer_FwP <- gam(Prop.w.plastic ~ s(Trophic.level.via.fishbase, k=5) + s(Average.depth, k=5), 
-                      data = subset(d, Found == "pelagic"), family = gaussian)
+gamm_lmer_FwP_w <- gamm4(cbind(NwP, N-NwP) ~ s(Trophic.level.via.fishbase) + s(Average.depth) + Found + Prime_forage, 
+                                     random = ~(1|Order) + (1|Source), data = d_glmm_full, family = binomial)
+summary(gamm_lmer_FwP$gam)
+plot(gamm_lmer_FwP$gam)
+
+# compare models
+model.sel(gamm_lmer_FwP_w_conditional, gamm_lmer_FwP_w)
+
+#gamm_lmer_FwP <- gam(Prop.w.plastic ~ s(Trophic.level.via.fishbase) + s(Average.depth, by = Found) + Found, 
+#                       data = d, family = gaussian)
 
 
 # playing with a BRT ----
