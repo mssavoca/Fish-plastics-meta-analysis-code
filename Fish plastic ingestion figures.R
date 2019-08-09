@@ -11,89 +11,219 @@ library(lme4)
 library(gamm4)
 library(readxl)
 library(readr)
-library(ggplot2)
 library(MCMCglmm)
 library(MuMIn)
+library(itsadug)
 
-d = read.csv("Plastics ingestion records fish master_updated.csv") %>% 
-  mutate(WeightedProp = Prop.w.plastic*N,
-         Found = as_factor(case_when(Habitat %in% c("demersal", "reef-associated", "benthopelagic", "bathydemersal") ~ "demersal",
-                                  Habitat %in% c("pelagic-neritic", "pelagic-oceanic", "mesopelagic", "bathypelagic") ~ "pelagic")))
+SE = function(x){sd(x)/sqrt(sum(!is.na(x)))}
 
-d1 = read_xlsx("Plastics ingestion records fish master_updated.xlsx") %>% 
-  mutate(Found = case_when(Habitat %in% c("demersal", "reef-associated", "benthopelagic", "bathydemersal") ~ "demersal",
-                           Habitat %in% c("pelagic-neritic", "pelagic-oceanic", "mesopelagic", "bathypelagic") ~ "pelagic")) %>% 
-  filter(!is.na(`Prop w plastic`))
+d = read_csv("Plastics ingestion records fish master_final.csv") %>% 
+  janitor::clean_names() %>% 
+  rename(NwP = nw_p,
+         N = n) %>% 
+  mutate(WeightedProp = prop_w_plastic * N,
+         Found = as_factor(case_when(habitat %in% c("demersal", "reef-associated", "benthopelagic", "bathydemersal") ~ "demersal",
+                                     habitat %in% c("pelagic-neritic", "pelagic-oceanic", "mesopelagic", "bathypelagic") ~ "pelagic")),
+         prime_forage = na_if(prime_forage, "not listed")) %>% 
+  separate(binomial, into = c("genus", "species"), sep = " ", remove = FALSE)
+
+d_full <- d %>% 
+  filter(source != "Cliff et. al 2002") %>% 
+  drop_na(average_depth, Found, trophic_level_via_fishbase, prime_forage) 
+
+
+d_old_data = read_csv("Plastics ingestion records fish master_updated.csv") %>% 
+  janitor::clean_names() %>% 
+  rename(NwP = nw_p,
+         N = n) %>% 
+  mutate(WeightedProp = prop_w_plastic * N,
+         Found = as_factor(case_when(habitat %in% c("demersal", "reef-associated", "benthopelagic", "bathydemersal") ~ "demersal",
+                                     habitat %in% c("pelagic-neritic", "pelagic-oceanic", "mesopelagic", "bathypelagic") ~ "pelagic")),
+         prime_forage = na_if(prime_forage, "not listed")) %>% 
+  separate(species_name, into = c("genus", "species"), sep = " ", remove = FALSE)
+
+
+d_old_data <- d_old_data %>% 
+  drop_na(average_depth, Found, trophic_level_via_fishbase, prime_forage) 
+
+anti_join(distinct(d_full, source), distinct(d_old_data, source))
+
+
+# 
+# d1 = read_xlsx("Plastics ingestion records fish master_updated.xlsx") %>% 
+#   mutate(Found = case_when(Habitat %in% c("demersal", "reef-associated", "benthopelagic", "bathydemersal") ~ "demersal",
+#                            Habitat %in% c("pelagic-neritic", "pelagic-oceanic", "mesopelagic", "bathypelagic") ~ "pelagic")) %>% 
+#   filter(!is.na(`Prop w plastic`))
 
          
+
 # summary tables ----
 d_sp_summ <- d %>%
-#  group_by(IUCN.status) %>%  
-#  filter(N > 500 & Found == "pelagic") %>% 
-  drop_na(Vulnerability.score..via.fishbase.from.Cheug.et.al.2005.) %>% 
-  mutate(Vulnerability.category = cut(Vulnerability.score..via.fishbase.from.Cheug.et.al.2005.,
+#  filter(family %in% c("Scombridae", "Sphyrnidae", "Carcharhinidae")) %>% 
+  drop_na(vulnerability_score_via_fishbase_from_cheug_et_al_2005) %>% 
+  mutate(Vulnerability.category = cut(vulnerability_score_via_fishbase_from_cheug_et_al_2005,
                                       breaks=c(-Inf, 20, 40, 60, 80, Inf), 
                                       labels=c("low","low-moderate", "moderate-high", "high-very high", "very high"))) %>% 
-  group_by(Prop.w.plastic, Species.name, Vulnerability.category, Vulnerability.score..via.fishbase.from.Cheug.et.al.2005., IUCN.status) %>%  
-  summarize(Cat_mean = sum(NwP)/sum(N),
+  group_by(binomial, Vulnerability.category, vulnerability_score_via_fishbase_from_cheug_et_al_2005, iucn_status) %>%  
+  summarize(FO_plastic = sum(NwP)/sum(N),
             Sample_size = sum(N),
-            num_sp = n_distinct(Species.name), 
-            num_studies = n_distinct(Source)) %>% 
-  #drop_na(IUCN.status) %>% 
+            num_sp = n_distinct(binomial), 
+            num_studies = n_distinct(source)) %>% 
   filter(Vulnerability.category %in% c("moderate-high", "high-very high", "very high") & 
-           IUCN.status %in% c("VU", "EN", "CR") & 
-           Prop.w.plastic > 0.25)
+           iucn_status %in% c("NT","VU", "EN", "CR") & 
+           FO_plastic > 0.25 & Sample_size > 25)
 
 
-Fisheries_summ <- d %>% 
-  #filter(Prop.w.plastic > 0) %>% 
-  group_by(Commercial) %>% 
-  summarize(Sp_mean = mean(NwP/N),
-            Sample_size = sum(N),
-            num_species = n_distinct(Species.name))
+d_phylo_summ <- d %>% 
+  group_by(binomial) %>% 
+  drop_na(binomial) %>% 
+  summarise(sp = first(species),
+            FO_plastic = sum(NwP)/sum(N),
+            wgt_mean_plast_num = weighted.mean(mean_num_particles_per_indv, N),
+            se_num_plast = SE(mean_num_particles_per_indv),
+            sample_size = sum(N),
+            num_studies = n_distinct(source),
+            TL = first(trophic_level_via_fishbase)) %>% 
+  filter(FO_plastic > 0.1) %>% 
+  arrange(desc(FO_plastic))
+
+
+d_family_disc <- d %>% 
+  filter(family %in%  c("Carangidae", "Mugilidae", "Pleuronectidae", "Soleidae", "Myctophidae")) %>% 
+  group_by(family) %>% 
+  summarise(FO_plastic = sum(NwP)/sum(N),
+            sample_size = sum(N),
+            num_studies = n_distinct(source)) %>% 
+  arrange(desc(FO_plastic))
+
+d_sp_disc <- d %>% 
+  filter(binomial %in%  c("Thunnus thynnus", "Thunnus alalunga", "Katsuwonus pelamis", "Thunnus obesus", "Thunnus albacares",
+                              "Galeocerdo cuvier", "Prionace glauca")) %>% 
+  mutate(Vulnerability.category = cut(vulnerability_score_via_fishbase_from_cheug_et_al_2005,
+                                      breaks=c(-Inf, 20, 40, 60, 80, Inf), 
+                                      labels=c("low","low-moderate", "moderate-high", "high-very high", "very high"))) %>%
+  group_by(binomial) %>% 
+  summarise(common_name = first(common_name),
+            FO_plastic = sum(NwP)/sum(N),
+            sample_size = sum(N),
+            num_studies = n_distinct(source),
+            commercial_status = first(commercial),
+            AC_status = first(aquaculture), 
+            rec_status = first(recreational),
+            Vulnerability.category = first(Vulnerability.category)) %>% 
+  arrange(desc(FO_plastic))
+
+
+conserve_overview_fish <- d %>% 
+  group_by(iucn_status) %>% 
+  summarize(num_sp_per_cat = n_distinct(binomial))
+
+conserve_fish <- d %>% 
+  group_by(binomial) %>% 
+  filter(iucn_status %in% c("NT","VU", "EN", "CR")) %>% 
+  summarize(sp_avg = sum(NwP)/sum(N),
+            iucn = first(iucn_status),
+            sample_size = sum(N))
+
 
 # fish of concern for humans
 concern_fish <- d %>% 
-  group_by(Species.name) %>% 
-  filter(Commercial == "highly commercial" & 
-           Prop.w.plastic > 0.25 &
-           N > 50)
+  group_by(common_name, binomial, family) %>% 
+  filter(commercial %in% c("commercial", "highly commercial")) %>%
+  summarize(species_avg = sum(NwP)/sum(N),
+            sample_size = sum(N),
+            num_studies = n_distinct(source),
+            commercial_status = first(commercial),
+            AC_status = first(aquaculture), 
+            rec_status = first(recreational)) %>% 
+  filter(species_avg > 0.25 & sample_size > 25) %>% 
+  arrange(desc(species_avg))
+
+
 
 # geographic summary of data
 Fish_geo_summ <- d %>% 
-  #filter(Oceanographic.province..from.Longhurst.2007. %in% c("CHIN", "KURO", "SUND", "INDE")) %>% 
-  group_by(Oceanographic.province..from.Longhurst.2007.) %>% 
-  summarize(num_studies = n_distinct(Source),
-            num_sp = n_distinct(Species.name),
+  filter(oceanographic_province_from_longhurst_2007 %in% c("CHIN", "KURO", "SUND", "INDE")) %>%
+  #filter(oceanographic_province_from_longhurst_2007 %in% c("NAST E", "NECS", "MEDI")) %>% 
+  #filter(oceanographic_province_from_longhurst_2007 == "BPRL") %>% 
+  group_by(oceanographic_province_from_longhurst_2007) %>% 
+  summarize(num_studies = n_distinct(source),
+            num_sp = n_distinct(binomial),
             num_ind_studied = sum(N),
-            prop_by_region = sum(NwP)/sum(N))
+            prop_by_region = sum(NwP)/sum(N),
+            wgt_mean_plast_num = weighted.mean(mean_num_particles_per_indv, N),
+            se_plast_num = SE(mean_num_particles_per_indv))
 
 
 # preliminary plots ----
 
+# Supplemental plot by 5 year bins
+study_hist <- d %>% 
+  group_by(publicaton_year) %>% 
+  summarize(n_studies = n_distinct(source)) %>% 
+  ggplot(aes(publicaton_year, n_studies)) + 
+          geom_bar(stat = "identity") + 
+          geom_smooth(se = FALSE) +
+          theme_classic() +
+          xlab("Publication year") + 
+          ylab("Number of studies")
+  study_hist 
+
+FO_by_year <- d %>% 
+    filter(source != "Lucia et al. 2018") %>% 
+    group_by(publicaton_year) %>% 
+    summarize(FO = sum(NwP)/sum(N)) %>% 
+    ggplot(aes(publicaton_year, FO)) + 
+    geom_bar(stat = "identity") + 
+    geom_smooth(se = FALSE) +
+    theme_classic() +
+    xlab("Publication year") + 
+    ylab("Frequency of occurence")
+FO_by_year 
+
+num_plast_part_yr <- d %>% 
+  filter(source != "Lucia et al. 2018") %>% 
+  group_by(publicaton_year) %>% 
+  summarize(mean_num_part = mean(mean_num_particles_per_indv, na.rm = TRUE)) %>% 
+  ggplot(aes(publicaton_year, mean_num_part)) + 
+  geom_bar(stat = "identity") + 
+  geom_smooth(se = FALSE) +
+  theme_classic() +
+  xlab("Publication year") + 
+  ylab("Mean number of particles ingested per year")
+num_plast_part_yr
+
+  
 # risk/interest plot, do color by order, shape by Commercial
-risk_plot <- ggplot(d_sp_summ, aes(log10(Sample_size), Sp_mean)) +
-  geom_point(aes(size = num_studies, color = Order, shape = Commercial), alpha = 0.6) +
+risk_plot <- d %>% 
+  group_by(binomial) %>% 
+  summarise(Sp_mean = sum(NwP)/sum(N),
+            sample_size = sum(N),
+            num_studies = n_distinct(source),
+            commercial = first(commercial),
+            order = first(order)) %>% 
+  ggplot(aes(log10(sample_size), Sp_mean)) +
+  geom_point(aes(size = num_studies, color = order, shape = commercial), alpha = 0.6) +
   geom_hline(yintercept = 0.25, linetype="dashed", color = "red") +
-  geom_vline(xintercept = log10(50), linetype="dashed", color = "red") +
+  geom_vline(xintercept = log10(25), linetype="dashed", color = "red") +
   xlab("Log[Sample Size]") +
   ylab("Mean Frequency of Occurrence of Plastic Ingestion") +
   annotate("text", x = c(0.6, 3.8, 0.6, 3.8),
-                         y=c(0.9, 0.9, 0.05, 0.05), 
+           y=c(0.9, 0.9, 0.05, 0.05), 
            label = c("high incidence, data poor", "high incidence, data rich", 
                      "low incidence, data poor", "low incidence, data rich")) +
   theme_classic()
 risk_plot
 
 
-
-p <- ggplot(d1, 
-           aes(`Trophic level via fishbase`, `Prop w plastic`, size= N, weight = N)) + 
+p <- ggplot(d, 
+           aes(trophic_level_via_fishbase, prop_w_plastic, size= N, weight = N)) + 
   geom_point(alpha = 0.4) +  # Eventually add in foraging behavior here 
   geom_smooth(col = "blue", method = "loess") +
+  xlim(2, 5) +
   xlab("Trophic level") +
   ylab("Proportion of individuals with ingested plastic") +
-  annotate("text", x = c(2.75, 3.9), y= -0.05, 
+  annotate("text", x = c(2.75, 4), y= -0.05, 
            label = c("planktivorous", "piscivorous")) +
   theme_classic() +
   theme(axis.text.x = element_text(size=12),
@@ -102,35 +232,17 @@ p <- ggplot(d1,
 p + guides(size = FALSE)
 
 
-p2 <- ggplot(d, aes(Habitat, Prop.w.plastic, size=N)) +
-  #geom_jitter() + 
-  geom_boxplot() +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))
-p2
 
-
-# proportion ingestion plastic with depth (perhaps remove demersal here)
-p3 <- ggplot(filter(d1, Habitat %in% c("demersal", "pelagic-neritic", "pelagic-oceanic", "reef-associated", "benthopelagic")),
-            aes(-`Average depth`, `Prop w plastic`, size=N, weight = N)) +  #col=Family
-  geom_point(alpha = 0.4, aes(color = Basin)) + 
-  geom_smooth(col = "grey20", method = "loess") +
-  geom_hline(yintercept = 0, linetype = "dashed") +
-  facet_wrap(~ Habitat, scales = "free_y", ncol = 1) +
-  #ylim(0,1) + 
-  #xlim(-500,0) +
-  coord_flip() +
-  theme_classic()
-p3
-
-p3_b <- ggplot(filter(d1, Found != "NA"), 
-               aes(-`Average depth`, `Prop w plastic`, size=N, weight = N)) +
+p3_b <- ggplot(filter(d, Found != "NA"), 
+               aes(average_depth, prop_w_plastic, size = N, weight = N)) +
   geom_point(alpha = 0.4) + 
   geom_smooth(col = "blue", method = "loess") +
   geom_hline(yintercept = 0, linetype = "dashed") +
   facet_wrap(~ Found, scales = "free_y", ncol = 1) +
   #ylim(0,1) + 
-  xlim(-1500,0) +
   coord_flip() +
+  scale_x_reverse() +
+  xlim(1500,0) +
   xlab("Average depth") +
   ylab("Proportion of individuals with ingested plastic") +
   theme_classic() +
@@ -141,6 +253,14 @@ p3_b <- ggplot(filter(d1, Found != "NA"),
 p3_b + guides(size = FALSE)
 
 
+p_raincloud <- ggplot(d,aes(x=Found,y=prop_w_plastic, fill = Found))+
+  geom_flat_violin(position = position_nudge(x = .2, y = 0),adjust = 2)+
+  geom_point(position = position_jitter(width = .15), size = .25)+
+  
+  ylab('Score')+xlab('Group')+coord_flip()+theme_classic()+guides(fill = FALSE)+
+  ggtitle('Figure R3: The Basic Raincloud with Colour')
+p_raincloud 
+
 
 p4 <- ggplot(filter(d1, `Oceanographic province (from Longhurst 2007)` != "NA"), 
              aes(`Oceanographic province (from Longhurst 2007)`, `Prop w plastic`)) +
@@ -150,7 +270,7 @@ p4 <- ggplot(filter(d1, `Oceanographic province (from Longhurst 2007)` != "NA"),
 p4
 
 
-p5 <- ggplot(d, aes(Order, Prop.w.plastic)) +
+p5 <- ggplot(d, aes(order, mean_num_particles_per_indv)) +
   #geom_jitter() + 
   geom_boxplot() +
   theme(axis.text.x = element_text(angle = 90, hjust = 1))
@@ -169,9 +289,9 @@ p6 <- ggplot(d,
 p6
 
 
-p7 <- ggplot(filter(d, Prime_forage != "NA"), 
-                aes(Prime_forage, Prop.w.plastic)) +
-  geom_jitter() + 
+p7 <- ggplot(filter(d, prime_forage != "NA"), 
+                aes(prime_forage, prop_w_plastic)) +
+  geom_jitter(aes(size = N)) + 
   geom_boxplot(alpha = 0.1, outlier.shape = NA) +
   theme(axis.text.x = element_text(angle = 90, hjust = 1))
 p7
@@ -194,17 +314,35 @@ p9
 
 <<<<<<< HEAD
 # GLMM ----
-
 # USING THIS ONE WITH SCALED DEPTH, certified by Gemma
-d_glmm_full <- d %>% 
-  drop_na(Average.depth, Found, Trophic.level.via.fishbase, Prime_forage)
 
-glmm_FwP <- glmer(cbind(NwP, N-NwP) ~ scale(Average.depth)*Found + Trophic.level.via.fishbase + Prime_forage +
-                  (1|Source) + (1|Order), 
-                  data = d_glmm_full, family = binomial, na.action = "na.fail")
+
+glmm_FwP <- glmer(cbind(NwP, N-NwP) ~ scale(average_depth)*Found + trophic_level_via_fishbase + prime_forage +
+                  (1|source) + (1|order), 
+                  data = d_old_data, family = binomial, na.action = "na.fail")
 summary(glmm_FwP)
 confint(ranef(glmm_FwP), method="Wald")
 ranef(glmm_FwP)
+
+glmm_FwP_nointeraction <- glmer(cbind(NwP, N-NwP) ~ scale(average_depth) + Found + trophic_level_via_fishbase + prime_forage +
+                                  (1|source) + (1|order), 
+                                data = d_glmm_full, family = binomial, na.action = "na.fail")
+
+model.sel(glmm_FwP, glmm_FwP_nointeraction)
+
+d_num_plast <- d %>%
+  drop_na(mean_num_particles_per_indv,
+          average_depth, Found, trophic_level_via_fishbase, prime_forage)
+%>% 
+  filter(mean_num_particles_per_indv > 0)
+
+glmm_num_plast <- glmer(mean_num_particles_per_indv ~ scale(average_depth)*Found + trophic_level_via_fishbase + prime_forage +
+                    (1|source) + (1|order), 
+                  data = d_num_plast, na.action = "na.fail")
+summary(glmm_num_plast)
+confint(ranef(glmm_FwP), method="Wald")
+ranef(glmm_FwP)
+
 
 # multi-model selection using AICc
 GLMM_dredge <- dredge(glmm_FwP)
@@ -217,50 +355,120 @@ confint(a) #computes confidence interval
 
 
 glmm_Commerical <- glmer(cbind(NwP, N-NwP) ~ Commercial +
-                    (1|Source) + (1|Order), data = d, family = binomial)
+                    (1|source) + (1|order), data = d, family = binomial)
 summary(glmm_Commerical)
 
 
 
 
+
+
+# trying a gamm ----
+
+
+# wrapper fucntion  needed to allow MuMIn to compare models
+gamm4 <- function(...) structure(c(gamm4::gamm4(...), list(call = match.call())), class = c("gamm", "list"))  
+
+# final models
+gamm4_FwP_w_conditional <- gamm4(cbind(NwP, N-NwP) ~ s(trophic_level_via_fishbase) + s(scale(average_depth), by = Found) + 
+                                   Found + prime_forage, 
+                                 random = ~(1|order) + (1|source), 
+                                 data = d_full, family = binomial)
+
+summary(gamm4_FwP_w_conditional$gam)
+plot(gamm4_FwP_w_conditional$gam)
+
+# gam_FwP_w_conditional <- gamm4(cbind(NwP, N-NwP) ~ s(trophic_level_via_fishbase) + s(scale(average_depth), by = Found) + 
+#                                    Found + prime_forage,
+#                                  data = d_glmm_full, family = binomial)
+
+gamm4_FwP <- gamm4(cbind(NwP, N-NwP) ~ s(trophic_level_via_fishbase) + s(scale(average_depth)) + Found + prime_forage, 
+                   random = ~(1|order) + (1|source), 
+                  data = d_glmm_full, family = binomial)
+summary(gamm4_FwP$gam)
+plot(gamm4_FwP$gam)
+
+
+# gamm4_full <- gamm4(cbind(NwP, N-NwP) ~ s(trophic_level_via_fishbase) + s(scale(average_depth)) + Found + prime_forage, 
+#                    random = ~(1|order) + (1|source), 
+#                    data = d_glmm_full, family = binomial)
+# summary(gamm4_FwP$gam)
+# plot(gamm4_FwP$gam)
+
+gamm4_FwP_wo_TL <- gamm4(cbind(NwP, N-NwP) ~  + s(scale(average_depth)) + Found + prime_forage, 
+                         random = ~(1|order) + (1|source), data = d_glmm_full, family = binomial)
+gamm4_FwP_wo_depth <- gamm4(cbind(NwP, N-NwP) ~ s(trophic_level_via_fishbase) + Found + prime_forage, 
+                            random = ~(1|order) + (1|source), data = d_glmm_full, family = binomial)
+
+# summary(gamm4_FwP_wo_depth$gam)
+# plot(gamm4_FwP_wo_depth$gam)
+
+gamm4_FwP_wo_Found <- gamm4(cbind(NwP, N-NwP) ~ s(trophic_level_via_fishbase) + s(scale(average_depth)) + prime_forage, 
+                            random = ~(1|order) + (1|source), data = d_glmm_full, family = binomial)
+gamm4_FwP_wo_Forage <- gamm4(cbind(NwP, N-NwP) ~ s(trophic_level_via_fishbase) + s(scale(average_depth)) + Found, 
+                             random = ~(1|order) + (1|source), data = d_glmm_full, family = binomial)
+gamm4_FwP_TLonly <- gamm4(cbind(NwP, N-NwP) ~ s(trophic_level_via_fishbase), 
+                          random = ~(1|order) + (1|source), data = d_glmm_full, family = binomial)
+gamm4_FwP_depth_cond_only <- gamm4(cbind(NwP, N-NwP) ~ + s(scale(average_depth), by = Found), 
+                                   random = ~(1|order) + (1|source), data = d_glmm_full, family = binomial)
+gamm4_FwP_depth_only <- gamm4(cbind(NwP, N-NwP) ~ + s(scale(average_depth)), 
+                              random = ~(1|order) + (1|source), data = d_glmm_full, family = binomial)
+gamm4_FwP_Foundonly <- gamm4(cbind(NwP, N-NwP) ~ Found, 
+                          random = ~(1|order) + (1|source), data = d_glmm_full, family = binomial)
+gamm4_FwP_Forageonly <- gamm4(cbind(NwP, N-NwP) ~ prime_forage, 
+                              random = ~(1|order) + (1|source), data = d_glmm_full, family = binomial)
+gamm4_null <- gamm4(cbind(NwP, N-NwP) ~ 1, 
+                    random = ~(1|order) + (1|source), data = d_glmm_full, family = binomial)
+
+# compare models
+GAMM_mod.sel <- model.sel(gamm4_FwP_w_conditional, gamm4_FwP,
+                       gamm4_FwP_wo_TL, gamm4_FwP_wo_depth, gamm4_FwP_wo_Found, gamm4_FwP_wo_Forage, 
+                       gamm4_FwP_TLonly, gamm4_FwP_depth_only, gamm4_FwP_Foundonly, gamm4_FwP_Forageonly,
+                       gamm4_null)
+View(GAMM_mod.sel)
+
+GAMM_mod.avg=model.avg(GAMM_mod.sel)
+summary(GAMM_mod.avg)
+
+
+# best model
+summary(gamm4_FwP_wo_depth$mer)
+summary(gamm4_FwP_wo_depth$gam)
+plot(gamm4_FwP_wo_depth$gam)
+
+
+# mgcv gamms
+gamm_FwP_wconditional <- gam(prop_w_plastic ~ s(trophic_level_via_fishbase) + s(average_depth, by = Found) + Found + prime_forage + s(order, bs="re"),
+                      data = d, family = gaussian)
+gam.check(gamm_FwP_wconditional)
+
+plot_smooth(gamm_FwP_wconditional, view="average_depth", cond=list(Group="Found"))
+
+gamm_num_plast <- gam(mean_num_particles_per_indv ~ s(trophic_level_via_fishbase) + s(average_depth) + Found,
+                             data = d_num_plast, family = gaussian)
+gam.check(gamm_num_plast)
+summary(gamm_num_plast)
+plot(gamm_num_plast)
+
+mgcv.models <- model.sel(gamm_FwP_wconditional, gamm_FwP)
+foo2=model.avg(mgcv.models)
+
+
+# gamm_FwP <- gamm(Prop.w.plastic ~ s(trophic_level_via_fishbase,k=10)+s(Average.depth, by = Found, k=10) + Found, data=d)
+# ### $gam to look at gam effects. $lme to look at random effects.
+# summary(gamm_FwP$gam)
+# plot(gamm_FwP$gam)
+
 # some other analyses
 
+
 # MCMC GLMM ----
-MCMCglmm_FwP <- MCMCglmm(log(Prop.w.plastic) ~ scale(Average.depth)*Found + Trophic.level.via.fishbase + Prime_forage,
-                         random = ~ Order,
+MCMCglmm_FwP <- MCMCglmm(mean_num_particles_per_indv ~ scale(average-depth)*Found + trophic_level_via_fishbase + prime_forage,
+                         random = ~ order,
                          data = d_glmm_full, family = "gaussian",
                          nitt = 1150, thin = 100, burnin = 150,
                          pr = TRUE, # To save the posterior mode of for each level or category in your random effect(s) we use pr = TRUE, which saves them in the $Sol part of the model output.
                          verbose = TRUE)
-
-
-
-# trying a gamm ----
-gamm_FwP <- gamm(Prop.w.plastic ~ s(Trophic.level.via.fishbase,k=10)+s(Average.depth, by = Found, k=10) + Found, data=d)
-### $gam to look at gam effects. $lme to look at random effects.
-summary(gamm_FwP$gam)
-plot(gamm_FwP$gam)
-
-
-# this seems to be working
-gamm_lmer_FwP_w_conditional <- gamm4(cbind(NwP, N-NwP) ~ s(Trophic.level.via.fishbase) + s(Average.depth, by = Found) + Found + Prime_forage, 
-                        random = ~(1|Order) + (1|Source), data = d_glmm_full, family = binomial)
-summary(gamm_lmer_FwP$gam)
-plot(gamm_lmer_FwP$gam)
-
-GAMM_dredge <- dredge(gamm_lmer_FwP_w_conditional)
-
-
-gamm_lmer_FwP_w <- gamm4(cbind(NwP, N-NwP) ~ s(Trophic.level.via.fishbase) + s(Average.depth) + Found + Prime_forage, 
-                                     random = ~(1|Order) + (1|Source), data = d_glmm_full, family = binomial)
-summary(gamm_lmer_FwP$gam)
-plot(gamm_lmer_FwP$gam)
-
-# compare models
-model.sel(gamm_lmer_FwP_w_conditional, gamm_lmer_FwP_w)
-
-#gamm_lmer_FwP <- gam(Prop.w.plastic ~ s(Trophic.level.via.fishbase) + s(Average.depth, by = Found) + Found, 
-#                       data = d, family = gaussian)
 
 
 # playing with a BRT ----
@@ -321,9 +529,26 @@ plot(plot.tree, type = "fan", open.angle = 360 - tree.angle, rotate = 270,
 # if (!requireNamespace("BiocManager", quietly = TRUE))
 #   install.packages("BiocManager")
 =======
+  
+# Junk code below here  
+#   
+#   # proportion ingestion plastic with depth (perhaps remove demersal here)
+#   p3 <- ggplot(filter(d1, Habitat %in% c("demersal", "pelagic-neritic", "pelagic-oceanic", "reef-associated", "benthopelagic")),
+#                aes(-`Average depth`, `Prop w plastic`, size=N, weight = N)) +  #col=Family
+#   geom_point(alpha = 0.4, aes(color = Basin)) + 
+#   geom_smooth(col = "grey20", method = "loess") +
+#   geom_hline(yintercept = 0, linetype = "dashed") +
+#   facet_wrap(~ Habitat, scales = "free_y", ncol = 1) +
+#   #ylim(0,1) + 
+#   #xlim(-500,0) +
+#   coord_flip() +
+#   theme_classic()
+# p3  
+  
+  
 # # GLMM ----
 # glmm_FwP <- glmer(cbind(NwP, N-NwP) ~ `Trophic level via fishbase` + `Average depth`*Found + `Oceanographic province (from Longhurst 2007)` +
-#                    (1|Source) + (1|Order), data = d1, family = binomial)
+#                    (1|source) + (1|Order), data = d1, family = binomial)
 # summary(glmm_FwP)
 >>>>>>> 017f2f8348b3b4f5fdf48db6b998d9cda0816ac3
 # 
@@ -338,11 +563,19 @@ plot(plot.tree, type = "fan", open.angle = 360 - tree.angle, rotate = 270,
 # 
 # # this seems to be working
 # gamm_lmer_FwP <- gamm4(cbind(NwP, N-NwP) ~ s(Trophic.level.via.fishbase, k=5) + s(Average.depth, k=5) + Habitat, 
-#                        random = ~(1|Order) + (1|Source), data = d, family = binomial)
+#                        random = ~(1|Order) + (1|source), data = d, family = binomial)
 # summary(gamm_lmer_FwP$gam)
 # plot(gamm_lmer_FwP$gam)
 # 
 # 
+
+# gam_FwP <- gamm4(cbind(NwP, N-NwP) ~ s(trophic_level_via_fishbase) + s(scale(average_depth)) + Found + prime_forage, 
+#                    data = d_glmm_full, family = binomial)
+
+# GAMM_vs.GAM <- model.sel(gamm4_FwP_w_conditional, gamm4_FwP, 
+#                          gam_FwP_w_conditional, gam_FwP)
+# GAMM_vs.GAM  # Result: GAMM blows GAM out of the water
+
 # # playing with a BRT ----
 # 
 # ## I think this is what I want, check with Steph
