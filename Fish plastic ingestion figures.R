@@ -3,17 +3,18 @@
 ########################################################################################
 
 # load packages and data ----
-library(tidyverse)
-library(gbm)
 library(dismo)
-library(mgcv)
-library(lme4)
+library(gbm)
 library(gamm4)
+library(ggrepel)
+library(itsadug)
+library(lme4)
+library(MCMCglmm)
+library(mgcv)
+library(MuMIn)
 library(readxl)
 library(readr)
-library(MCMCglmm)
-library(MuMIn)
-library(itsadug)
+library(tidyverse)
 
 SE = function(x){sd(x)/sqrt(sum(!is.na(x)))}
 
@@ -57,6 +58,16 @@ d_full <- d %>%
          
 
 # summary tables ----
+# some summary tables
+d_sp_sum <- d %>%
+  filter(!species %in% c("sp.", "spp.")) %>%
+  group_by(binomial, order, commercial) %>%
+  summarize(Sp_mean = mean(prop_w_plastic),
+            Sample_size = sum(N),
+            num_studies = n_distinct(source)) %>%
+  arrange(-Sp_mean)
+
+
 d_phylo_summ <- d %>% 
   group_by(binomial) %>% 
   drop_na(binomial) %>% 
@@ -142,10 +153,36 @@ concern_fish <- d %>%
   arrange(-species_avg)
 
 
+# MAX'S RAREFACTION CURVE
+## Cumulative unique entries in list of vectors
+cum_unique <- function(l) {
+  result <- integer(length(l))
+  for (i in 1:length(l)) {
+    result[i] <- length(unique(unlist(l[1:i])))
+  }
+  result
+}
+d_full %>% 
+  filter(prop_w_plastic > 0) %>% 
+  group_by(publication_year) %>% 
+  summarize(species = list(unique(binomial)),
+            annual_N = sum(N)) %>% 
+  ungroup %>% 
+  mutate(cum_species = cum_unique(species),
+         cum_n = cumsum(annual_N),
+         cpue = cum_species / cum_n) %>% 
+  ggplot(aes(cum_n, cum_species)) +
+  geom_line() +
+  geom_point() +
+  geom_text_repel(aes(label = publication_year), nudge_x = 1000, segment.color = "lightblue") +
+  labs(x = "Cumulative number of individuals sampled",
+       y = "Cumuluative number of species found with ingested plastic") + 
+  theme_classic(base_size = 14)
+
 
 # geographic summary of data
 Fish_geo_summ <- d %>% 
-  filter(oceanographic_province_from_longhurst_2007 %in% c("CHIN", "KURO", "SUND", "INDE")) %>%
+  #filter(oceanographic_province_from_longhurst_2007 %in% c("CHIN", "KURO", "SUND", "INDE")) %>%
   #filter(oceanographic_province_from_longhurst_2007 %in% c("NAST E", "NECS", "MEDI")) %>% 
   #filter(oceanographic_province_from_longhurst_2007 == "BPRL") %>% 
   group_by(oceanographic_province_from_longhurst_2007) %>% 
@@ -162,21 +199,22 @@ Fish_geo_summ <- d %>%
 
 # Supplemental plot by 5 year bins
 study_hist <- d %>% 
-  group_by(publicaton_year) %>% 
+  group_by(publication_year) %>% 
   summarize(n_studies = n_distinct(source)) %>% 
-  ggplot(aes(publicaton_year, n_studies)) + 
+  ggplot(aes(publication_year, n_studies)) + 
           geom_bar(stat = "identity") + 
           geom_smooth(se = FALSE) +
-          theme_classic() +
+          theme_classic(base_size = 14) +
           xlab("Publication year") + 
-          ylab("Number of studies")
-  study_hist 
+          ylab("Number of studies") 
+study_hist 
+
 
 FO_by_year <- d %>% 
     filter(source != "Lucia et al. 2018") %>% 
-    group_by(publicaton_year) %>% 
+    group_by(publication_year) %>% 
     summarize(FO = sum(NwP)/sum(N)) %>% 
-    ggplot(aes(publicaton_year, FO)) + 
+    ggplot(aes(publication_year, FO)) + 
     geom_bar(stat = "identity") + 
     geom_smooth(se = FALSE) +
     theme_classic() +
@@ -186,9 +224,9 @@ FO_by_year
 
 num_plast_part_yr <- d %>% 
   filter(includes_microplastic == "Y") %>% 
-  group_by(publicaton_year) %>% 
+  group_by(publication_year) %>% 
   summarize(mean_num_part = mean(mean_num_particles_per_indv, na.rm = TRUE)) %>% 
-  ggplot(aes(publicaton_year, mean_num_part)) + 
+  ggplot(aes(publication_year, mean_num_part)) + 
   geom_bar(stat = "identity") + 
   geom_smooth(se = FALSE) +
   theme_classic() +
@@ -201,16 +239,19 @@ require(raster)
 shape <- shapefile("longhurst_v4_2010/Longhurst_world_v4_2010.shp")
 plot(shape)
 
+name <- shape$ProvCode
+polygon <- shape@polygons
+
 
 # risk/interest plot, do color by order, shape by Commercial
 risk_plot <- d %>% 
-  group_by(binomial) %>% 
-  summarise(Sp_mean = sum(NwP)/sum(N),
-            sample_size = sum(N),
-            num_studies = n_distinct(source),
-            commercial = first(commercial),
-            order = first(order)) %>% 
-  ggplot(aes(log10(sample_size), Sp_mean)) +
+#  filter(!species %in% c("sp.", "spp.")) %>%
+  group_by(binomial, order, commercial) %>%
+  summarize(Sp_mean = mean(prop_w_plastic),
+            Sample_size = sum(N),
+            num_studies = n_distinct(source)) %>%
+  drop_na(order, commercial) %>% 
+  ggplot(aes(log10(Sample_size), Sp_mean)) +
   geom_point(aes(size = num_studies, color = order, shape = commercial), alpha = 0.6) +
   geom_hline(yintercept = 0.25, linetype="dashed", color = "red") +
   geom_vline(xintercept = log10(25), linetype="dashed", color = "red") +
@@ -220,16 +261,16 @@ risk_plot <- d %>%
            y=c(0.9, 0.9, 0.05, 0.05), 
            label = c("high incidence, data poor", "high incidence, data rich", 
                      "low incidence, data poor", "low incidence, data rich")) +
-  theme_classic()
+  theme_classic(base_size = 14)
 risk_plot
 
 binom_plot <- ggplot(filter(d, includes_microplastic != "NA"), 
-                     aes(publicaton_year, includes_microplastic)) +
+                     aes(publication_year, includes_microplastic)) +
   geom_point() +
   geom_smooth(method = "glm", method.args = list(family = "binomial"))
 binom_plot
 
-p <- ggplot(d, 
+p <- ggplot(d_full, 
            aes(trophic_level_via_fishbase, prop_w_plastic, size= N, weight = N)) + 
   geom_point(alpha = 0.4) +  # Eventually add in foraging behavior here 
   geom_smooth(col = "blue", method = "loess") +
