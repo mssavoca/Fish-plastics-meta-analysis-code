@@ -152,34 +152,6 @@ concern_fish <- d %>%
   filter(species_avg > 0.25 & sample_size > 25) %>% 
   arrange(-species_avg)
 
-
-# MAX'S RAREFACTION CURVE
-## Cumulative unique entries in list of vectors
-cum_unique <- function(l) {
-  result <- integer(length(l))
-  for (i in 1:length(l)) {
-    result[i] <- length(unique(unlist(l[1:i])))
-  }
-  result
-}
-d_full %>% 
-  filter(prop_w_plastic > 0) %>% 
-  group_by(publication_year) %>% 
-  summarize(species = list(unique(binomial)),
-            annual_N = sum(N)) %>% 
-  ungroup %>% 
-  mutate(cum_species = cum_unique(species),
-         cum_n = cumsum(annual_N),
-         cpue = cum_species / cum_n) %>% 
-  ggplot(aes(cum_n, cum_species)) +
-  geom_line() +
-  geom_point() +
-  geom_text_repel(aes(label = publication_year), nudge_x = 1000, segment.color = "lightblue") +
-  labs(x = "Cumulative number of individuals sampled",
-       y = "Cumuluative number of species found with ingested plastic") + 
-  theme_classic(base_size = 14)
-
-
 # geographic summary of data
 Fish_geo_summ <- d %>% 
   #filter(oceanographic_province_from_longhurst_2007 %in% c("CHIN", "KURO", "SUND", "INDE")) %>%
@@ -196,6 +168,52 @@ Fish_geo_summ <- d %>%
 
 
 # preliminary plots ----
+
+# MAX'S RAREFACTION CURVE
+## Cumulative unique entries in list of vectors
+cum_unique <- function(l) {
+  result <- integer(length(l))
+  for (i in 1:length(l)) {
+    result[i] <- length(unique(unlist(l[1:i])))
+  }
+  result
+}
+d_rarefaction_all <-  d_full %>% 
+  group_by(publication_year) %>% 
+  summarize(species = list(unique(binomial)),
+            annual_N = sum(N)) %>% 
+  ungroup %>% 
+  mutate(cum_species = cum_unique(species),
+         cum_n = cumsum(annual_N),
+         cpue = cum_species / cum_n)
+d_rarefaction_ingest_only <-  d_full %>%  
+  filter(prop_w_plastic > 0) %>% 
+  group_by(publication_year) %>% 
+  summarize(species = list(unique(binomial)),
+            annual_N = sum(N)) %>% 
+  ungroup %>% 
+  mutate(cum_species = cum_unique(species),
+         cum_n = cumsum(annual_N),
+         cpue = cum_species / cum_n)
+
+rarefaction_plot <- ggplot() +
+  geom_line(data = d_rarefaction_all, aes(cum_n, cum_species), color = "dark blue") +
+  geom_line(data = d_rarefaction_ingest_only, aes(cum_n, cum_species), color = "dark red") +
+  geom_point(data = d_rarefaction_all, aes(cum_n, cum_species)) +
+  geom_point(data = d_rarefaction_ingest_only, aes(cum_n, cum_species)) +
+  geom_text_repel(data = d_rarefaction_all, 
+                  aes(cum_n, cum_species, label = publication_year), 
+                  nudge_x = -1500, nudge_y = 10,
+                  segment.color = "black") +
+  geom_text_repel(data = d_rarefaction_ingest_only, 
+                  aes(cum_n, cum_species, label = publication_year), 
+                  nudge_x = 1500,
+                  segment.color = "black") +
+  labs(x = "Cumulative number of individuals sampled",
+       y = "Cumuluative number of species sampled") + 
+  theme_classic(base_size = 14)
+rarefaction_plot
+
 
 # Supplemental plot by 5 year bins
 study_hist <- d %>% 
@@ -246,20 +264,33 @@ polygon <- shape@polygons
 # risk/interest plot, do color by order, shape by Commercial
 risk_plot <- d %>% 
 #  filter(!species %in% c("sp.", "spp.")) %>%
-  group_by(binomial, order, commercial) %>%
+  group_by(binomial, commercial) %>%
   summarize(Sp_mean = mean(prop_w_plastic),
             Sample_size = sum(N),
             num_studies = n_distinct(source)) %>%
-  drop_na(order, commercial) %>% 
+  ungroup %>% 
+  mutate(commercial = factor(commercial),
+         studies_cat = cut(num_studies, 
+                           c(0, 1, 3, 6),
+                           c("Poorly studied (n=1)", "Moderately studied (n=2-3)", "Well studied (n=4-6)")),
+         commercial = fct_collapse(commercial,
+                                   Commercial = c("commercial", "highly commercial"),
+                                   Minor = c("minor commercial", "subsistence"),
+                                   None = "none")) %>% 
+  arrange(num_studies) %>% 
+  drop_na(commercial) %>% 
   ggplot(aes(log10(Sample_size), Sp_mean)) +
-  geom_point(aes(size = num_studies, color = order, shape = commercial), alpha = 0.6) +
-  geom_hline(yintercept = 0.25, linetype="dashed", color = "red") +
-  geom_vline(xintercept = log10(25), linetype="dashed", color = "red") +
+  geom_point(aes(color = studies_cat, shape = commercial)) +
+  geom_hline(yintercept = 0.25, linetype="dashed", color = "grey50") +
+  geom_vline(xintercept = log10(25), linetype="dashed", color = "grey50") +
+  #facet_wrap(~ commercial) +
   xlab("Log[Sample Size]") +
-  ylab("Mean Frequency of Occurrence of Plastic Ingestion") +
+  ylab("Plastic ingestion incidence (FO)") +
+  labs(color = "Number of studies", shape = "Commercial status") +
+  scale_color_manual(values = c("black", "blue", "red")) +
   annotate("text", x = c(0.6, 3.8, 0.6, 3.8),
-           y=c(0.9, 0.9, 0.05, 0.05), 
-           label = c("high incidence, data poor", "high incidence, data rich", 
+           y=c(0.9, 0.9, 0.06, 0.055),
+           label = c("high incidence, data poor", "high incidence, data rich",
                      "low incidence, data poor", "low incidence, data rich")) +
   theme_classic(base_size = 14)
 risk_plot
@@ -290,7 +321,7 @@ p + guides(size = FALSE)
 p3_b <- ggplot(filter(d_full, Found != "NA"), 
                aes(average_depth, prop_w_plastic, size = N, weight = N)) +
   geom_point(alpha = 0.4) + 
-  geom_smooth(col = "blue", method = "loess") +
+  geom_smooth(col = "blue", method = "gam", se = TRUE) +
   geom_hline(yintercept = 0, linetype = "dashed") +
   facet_wrap(~ Found, scales = "free_y", ncol = 1) +
   #ylim(0,1) + 
@@ -540,11 +571,18 @@ foo2=model.avg(mgcv.models)
 # MCMC GLMM ----
 MCMCglmm_FwP <- MCMCglmm(mean_num_particles_per_indv ~ scale(average-depth)*Found + trophic_level_via_fishbase + prime_forage,
                          random = ~ order,
-                         data = d_glmm_full, family = "gaussian",
+                         data = d_glmm_full, family = NULL,
                          nitt = 1150, thin = 100, burnin = 150,
                          pr = TRUE, # To save the posterior mode of for each level or category in your random effect(s) we use pr = TRUE, which saves them in the $Sol part of the model output.
                          verbose = TRUE)
 
+
+MCMCglmm_FwP <- MCMCglmm(prop_w_plastic ~ scale(average_depth) + Found + prime_forage,
+                         random = ~(1|order) + (1|source), 
+                         data = d_full_wo_gaps, family = "gaussian",
+                         nitt = 1150, thin = 100, burnin = 150,
+                         pr = TRUE, # To save the posterior mode of for each level or category in your random effect(s) we use pr = TRUE, which saves them in the $Sol part of the model output.
+                         verbose = TRUE)
 
 # playing with a BRT ----
 
