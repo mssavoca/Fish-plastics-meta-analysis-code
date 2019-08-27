@@ -90,6 +90,7 @@ d_family_disc <- d %>%
             sample_size = sum(N),
             num_studies = n_distinct(source)) %>% 
   arrange(desc(FO_plastic))
+write_csv(d_family_disc, "Fish families of concern.csv")
 
 d_sp_disc <- d_full %>% 
   filter(binomial %in%  c("Thunnus thynnus", "Thunnus alalunga", "Katsuwonus pelamis", "Thunnus obesus", "Thunnus albacares",
@@ -97,18 +98,19 @@ d_sp_disc <- d_full %>%
   mutate(Vulnerability.category = cut(vulnerability_score_via_fishbase_from_cheug_et_al_2005,
                                       breaks=c(-Inf, 20, 40, 60, 80, Inf), 
                                       labels=c("low","low-moderate", "moderate-high", "high-very high", "very high"))) %>%
-  group_by(binomial) %>% 
-  summarise(common_name = first(common_name),
-            FO_plastic = sum(NwP)/sum(N),
+  group_by(common_name, binomial) %>% 
+  summarise(FO_plastic = sum(NwP)/sum(N),
             mean_num_plast = mean(mean_num_particles_per_indv, na.rm = TRUE),
             sample_size = sum(N),
             num_studies = n_distinct(source),
             commercial_status = first(commercial),
             AC_status = first(aquaculture), 
             rec_status = first(recreational),
-            Vulnerability.category = first(Vulnerability.category)) %>% 
+            Vulnerability.score = first(vulnerability_score_via_fishbase_from_cheug_et_al_2005),
+            IUCN.status = first(iucn_status)) %>% 
+  ungroup %>% 
   arrange(desc(FO_plastic))
-
+write_csv(d_sp_disc, "Tuna and shark species of concern.csv")
 
 conserve_overview_fish <- d %>% 
   group_by(iucn_status) %>% 
@@ -128,14 +130,16 @@ d_vulnerability <- d_full %>%
   mutate(Vulnerability.category = cut(vulnerability_score_via_fishbase_from_cheug_et_al_2005,
                                       breaks=c(-Inf, 20, 40, 60, 80, Inf), 
                                       labels=c("low","low-moderate", "moderate-high", "high-very high", "very high"))) %>% 
-  group_by(binomial, Vulnerability.category, vulnerability_score_via_fishbase_from_cheug_et_al_2005, iucn_status) %>%  
+  group_by(common_name, binomial, Vulnerability.category, vulnerability_score_via_fishbase_from_cheug_et_al_2005, iucn_status) %>%  
   summarize(FO_plastic = sum(NwP)/sum(N),
             Sample_size = sum(N),
-            num_sp = n_distinct(binomial), 
+        #    num_sp = n_distinct(binomial), 
             num_studies = n_distinct(source)) %>% 
+  ungroup %>% 
   filter(Vulnerability.category %in% c("moderate-high", "high-very high", "very high") & 
-           iucn_status %in% c("NT","VU", "EN", "CR") & 
+        #   iucn_status %in% c("NT","VU", "EN", "CR") & 
            FO_plastic > 0.25 & Sample_size > 25)
+write_csv(d_vulnerability, "Vulnerability table.csv")
 
 
 # fish of concern for humans
@@ -149,8 +153,10 @@ concern_fish <- d %>%
             commercial_status = first(commercial),
             AC_status = first(aquaculture), 
             rec_status = first(recreational)) %>% 
+  ungroup %>% 
   filter(species_avg > 0.25 & sample_size > 25) %>% 
   arrange(-species_avg)
+write_csv(concern_fish, "Concerning fish for humans.csv")
 
 # geographic summary of data
 Fish_geo_summ <- d %>% 
@@ -165,7 +171,7 @@ Fish_geo_summ <- d %>%
             prop_by_region = sum(NwP)/sum(N),
             wgt_mean_plast_num = weighted.mean(mean_num_particles_per_indv, N),
             se_plast_num = SE(mean_num_particles_per_indv))
-
+write_csv(Fish_geo_summ, "Fish_plastic geographic summary.csv")
 
 # preliminary plots ----
 
@@ -280,14 +286,14 @@ risk_plot <- d %>%
   arrange(num_studies) %>% 
   drop_na(commercial) %>% 
   ggplot(aes(log10(Sample_size), Sp_mean)) +
-  geom_point(aes(color = studies_cat, shape = commercial)) +
+  geom_point(aes(color = commercial, shape = studies_cat), size =2) +
   geom_hline(yintercept = 0.25, linetype="dashed", color = "grey50") +
   geom_vline(xintercept = log10(25), linetype="dashed", color = "grey50") +
   #facet_wrap(~ commercial) +
   xlab("Log[Sample Size]") +
-  ylab("Plastic ingestion incidence (FO)") +
-  labs(color = "Number of studies", shape = "Commercial status") +
-  scale_color_manual(values = c("black", "blue", "red")) +
+  ylab("Species-specific plastic ingestion incidence (FO)") +
+  labs(color = "Commercial status", shape = "Number of studies") +
+  scale_color_manual(values = c("red","blue", "black")) +
   annotate("text", x = c(0.6, 3.8, 0.6, 3.8),
            y=c(0.9, 0.9, 0.06, 0.055),
            label = c("high incidence, data poor", "high incidence, data rich",
@@ -412,11 +418,25 @@ summary(glmm_FwP)
 confint(ranef(glmm_FwP), method="Wald")
 ranef(glmm_FwP)
 
-glmm_FwP_nointeraction <- glmer(cbind(NwP, N-NwP) ~ scale(average_depth) + Found + trophic_level_via_fishbase + prime_forage +
-                                  (1|source) + (1|order), 
-                                data = d_glmm_full, family = binomial, na.action = "na.fail")
 
-model.sel(glmm_FwP, glmm_FwP_nointeraction)
+
+# multi-model selection using AICc
+GLMM_dredge <- dredge(glmm_FwP)
+View(GLMM_dredge)
+write_csv(GLMM_dredge, "GLMM model selection table.csv")
+#subset(GLMM_dredge, delta < 4)
+a=model.avg(GLMM_dredge)
+summary(a) #The ‘subset’ (or ‘conditional’) average only averages over the models where the parameter appears. An alternative, the ‘full’ average assumes that a variable is included in every model
+confint(a) #computes confidence interval
+
+
+
+glmm_Commerical <- glmer(cbind(NwP, N-NwP) ~ commercial +
+                    (1|source) + (1|order), data = d_full_wo_gaps, family = binomial)
+summary(glmm_Commerical)
+
+
+
 
 d_num_plast <- d_full %>%
   select(mean_num_particles_per_indv,
@@ -424,34 +444,16 @@ d_num_plast <- d_full %>%
   drop_na(mean_num_particles_per_indv,
           average_depth, Found, trophic_level_via_fishbase, prime_forage) 
 
-  
+
 %>% 
   filter(mean_num_particles_per_indv > 0)
 
 glmm_num_plast <- glmer(mean_num_particles_per_indv ~ scale(average_depth)*Found + trophic_level_via_fishbase + prime_forage +
-                    (1|source) + (1|order), 
-                  data = d_num_plast, na.action = "na.fail")
+                          (1|source) + (1|order), 
+                        data = d_num_plast, na.action = "na.fail")
 summary(glmm_num_plast)
 confint(ranef(glmm_FwP), method="Wald")
 ranef(glmm_FwP)
-
-
-# multi-model selection using AICc
-GLMM_dredge <- dredge(glmm_FwP)
-GLMM_dredge
-#subset(GLMM_dredge, delta < 4)
-a=model.avg(GLMM_dredge)
-summary(a)
-
-confint(a) #computes confidence interval
-
-
-glmm_Commerical <- glmer(cbind(NwP, N-NwP) ~ Commercial +
-                    (1|source) + (1|order), data = d, family = binomial)
-summary(glmm_Commerical)
-
-
-
 
 
 
@@ -571,15 +573,16 @@ foo2=model.avg(mgcv.models)
 # MCMC GLMM ----
 MCMCglmm_FwP <- MCMCglmm(mean_num_particles_per_indv ~ scale(average-depth)*Found + trophic_level_via_fishbase + prime_forage,
                          random = ~ order,
-                         data = d_glmm_full, family = NULL,
+                         data = d_full_wo_gaps, family = NULL,
                          nitt = 1150, thin = 100, burnin = 150,
                          pr = TRUE, # To save the posterior mode of for each level or category in your random effect(s) we use pr = TRUE, which saves them in the $Sol part of the model output.
                          verbose = TRUE)
 
+d_full_wo_gaps <- select(d_full_wo_gaps, -family)
 
 MCMCglmm_FwP <- MCMCglmm(prop_w_plastic ~ scale(average_depth) + Found + prime_forage,
                          random = ~(1|order) + (1|source), 
-                         data = d_full_wo_gaps, family = "gaussian",
+                         data = d_full_wo_gaps, family = NULL,
                          nitt = 1150, thin = 100, burnin = 150,
                          pr = TRUE, # To save the posterior mode of for each level or category in your random effect(s) we use pr = TRUE, which saves them in the $Sol part of the model output.
                          verbose = TRUE)
@@ -600,7 +603,7 @@ gbm.plot(gbmFwP)
 
 
 
- # testing phylogenetic analyses ----
+# testing phylogenetic analyses ----
 library(rotl) #for phylogenetic analyses, get all the species? from Hinchliff et al. 2015 PNAS
 library(phytools)
 
