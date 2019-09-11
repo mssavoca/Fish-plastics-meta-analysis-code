@@ -59,12 +59,14 @@ d_full <- d %>%
 
 # summary tables ----
 # some summary tables
-d_sp_sum <- d %>%
+d_sp_sum <- d_full %>%
   filter(!species %in% c("sp.", "spp.")) %>%
+  #filter(commercial %in% c("commercial", "highly commercial")) %>% 
   group_by(binomial, order, commercial) %>%
   summarize(Sp_mean = mean(prop_w_plastic),
             Sample_size = sum(N),
             num_studies = n_distinct(source)) %>%
+  ungroup %>% 
   arrange(-Sp_mean)
 
 
@@ -118,6 +120,7 @@ conserve_overview_fish <- d %>%
 
 conserve_fish <- d %>% 
   group_by(binomial) %>% 
+  #filter(iucn_status == "LC") %>% 
   filter(iucn_status %in% c("NT","VU", "EN", "CR")) %>% 
   summarize(sp_avg = sum(NwP)/sum(N),
             iucn = first(iucn_status),
@@ -143,7 +146,7 @@ write_csv(d_vulnerability, "Vulnerability table.csv")
 
 
 # fish of concern for humans
-concern_fish <- d %>% 
+co156/210ncern_fish <- d %>% 
   group_by(common_name, binomial, family, species) %>% 
   filter(commercial %in% c("commercial", "highly commercial")) %>%
   summarize(species_avg = sum(NwP)/sum(N),
@@ -154,7 +157,7 @@ concern_fish <- d %>%
             AC_status = first(aquaculture), 
             rec_status = first(recreational)) %>% 
   ungroup %>% 
-  filter(species_avg > 0.25 & sample_size > 25) %>% 
+#  filter(species_avg > 0.25 & sample_size > 25) %>% 
   arrange(-species_avg)
 write_csv(concern_fish, "Concerning fish for humans.csv")
 
@@ -213,7 +216,7 @@ rarefaction_plot <- ggplot() +
                   segment.color = "black") +
   geom_text_repel(data = d_rarefaction_ingest_only, 
                   aes(cum_n, cum_species, label = publication_year), 
-                  nudge_x = 1500,
+                  nudge_x = 1500, nudge_y = -10,
                   segment.color = "black") +
   labs(x = "Cumulative number of individuals sampled",
        y = "Cumuluative number of species sampled") + 
@@ -324,10 +327,10 @@ p + guides(size = FALSE)
 
 
 
-p3_b <- ggplot(filter(d_full, Found != "NA"), 
+p3_b <- ggplot(filter(d, Found != "NA"), 
                aes(average_depth, prop_w_plastic, size = N, weight = N)) +
   geom_point(alpha = 0.4) + 
-  geom_smooth(col = "blue", method = "gam", se = TRUE) +
+  geom_smooth(col = "blue", method = "loess", se = TRUE) +
   geom_hline(yintercept = 0, linetype = "dashed") +
   facet_wrap(~ Found, scales = "free_y", ncol = 1) +
   #ylim(0,1) + 
@@ -422,6 +425,7 @@ ranef(glmm_FwP)
 
 # multi-model selection using AICc
 GLMM_dredge <- dredge(glmm_FwP)
+
 View(GLMM_dredge)
 write_csv(GLMM_dredge, "GLMM model selection table.csv")
 #subset(GLMM_dredge, delta < 4)

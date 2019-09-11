@@ -5,6 +5,7 @@
 
 library(dplyr)
 library(ggplot2)
+library(ggtree)
 library(gbm)
 library(dismo)
 library(mgcv)
@@ -12,20 +13,25 @@ library(lme4)
 library(gamm4)
 library(readxl)
 
-setwd("C:\\Users\\Danuta\\Dropbox\\matt_phylo")
-# d = read.csv("Plastics ingestion records fish master_AGM_MSS.csv", row.names=NULL) %>%
-#   mutate(WeightedProp = Prop.w.plastic*N)
-
-# d1 = read_xlsx("Plastics ingestion records fish master_AGM_MSS.xlsx")
-d1 = read.csv("Plastics ingestion records fish master_updated.csv", row.names=NULL)
+d = read_csv("Plastics ingestion records fish master_final.csv") %>% 
+  janitor::clean_names() %>% 
+  rename(NwP = nw_p,
+         N = n) %>% 
+  mutate(WeightedProp = prop_w_plastic * N,
+         Found = as_factor(case_when(habitat %in% c("demersal", "reef-associated", "benthopelagic", "bathydemersal") ~ "demersal",
+                                     habitat %in% c("pelagic-neritic", "pelagic-oceanic", "mesopelagic", "bathypelagic") ~ "pelagic")),
+         prime_forage = na_if(prime_forage, "not listed")) %>% 
+  separate(binomial, into = c("genus", "species"), sep = " ", remove = FALSE)
 
 # some summary tables
-d_sp_sum <- d1 %>%     # filter(N > 50) %>%
-  group_by(`Species.name`, Order) %>%
-  summarize(Sp_mean = mean(`Prop.w.plastic`),
+d_sp_sum <- d %>%
+  filter(!species %in% c("sp.", "spp.")) %>%
+  group_by(binomial, order) %>%
+  summarize(Sp_mean = mean(prop_w_plastic),
             Sample_size = sum(N),
-            num_studies = n_distinct(Source)) %>%
+            num_studies = n_distinct(source)) %>%
   arrange(-Sp_mean)
+
 
 # testing phylogenetic analyses ----
 library(rotl) #for phylogenetic analyses, get all the species? from Hinchliff et al. 2015 PNAS
@@ -42,8 +48,27 @@ library(stringr)
 # resolved_names <- resolved_names[!is.na(resolved_names$unique_name),] #removing NAs when no match was found (Genus sp. I think)
 breaks <- c(seq(1,nrow(d_sp_sum),50),nrow(d_sp_sum)+1)
 
+##### MAX'S ATTEMPT #####
 for (i in 1:(length(breaks)-1)){
-  taxa <- as.character(d_sp_sum$`Species.name`[breaks[i]:(breaks[i+1]-1)])
+  # Subset binomials, convert to character, drop missing
+  taxa <- as.character(d_sp_sum$binomial[breaks[i]:(breaks[i+1]-1)])
+  taxa <- taxa[taxa!=""]
+  # Use rotl to look up ottid's
+  resolved_namest <- tnrs_match_names(taxa, "Animals")
+  resolved_namest <- resolved_namest[!is.na(resolved_namest$unique_name),]
+  # Drop ottid's missing from synthetic tree (e.g. incertae sedis)
+  resolved_namest <- resolved_namest[is_in_tree(resolved_namest$ott_id),]
+  if (i==1){
+    resolved_namess <- resolved_namest
+  } else {
+    resolved_namess <- full_join(resolved_namess,resolved_namest)
+  }
+}
+my_tree <- tol_induced_subtree(ott_ids = resolved_names$ott_id, label_format = "name")
+#########################
+
+for (i in 1:(length(breaks)-1)){
+  taxa <- as.character(d_sp_sum$binomial[breaks[i]:(breaks[i+1]-1)])
   taxa <- taxa[taxa!=""]
   resolved_namest <- tnrs_match_names(taxa)
   resolved_namest <- resolved_namest[!is.na(resolved_namest$unique_name),]
@@ -94,11 +119,11 @@ plot.tree <- read.tree("Plotting - tree.phy")
 
 #Data to plot
 plot.data <- d_sp_sum
-plot.data <- plot.data[plot.data$Species.name!="",]
+plot.data <- plot.data[plot.data$binomial!="",]
 plot.data$TipLabel <- NA
 for(i in 1:nrow(plot.data)){
-  oj <- str_locate(plot.data$Species.name[i],' ')
-  plot.data$TipLabel[i] <- paste(substr(plot.data$Species.name[i],1,oj[1]-1),substr(plot.data$Species.name[i],oj[1]+1,nchar(as.character(plot.data$Species.name[i]))),sep="_")
+  oj <- str_locate(plot.data$binomial[i],' ')
+  plot.data$TipLabel[i] <- paste(substr(plot.data$binomial[i],1,oj[1]-1),substr(plot.data$binomial[i],oj[1]+1,nchar(as.character(plot.data$binomial[i]))),sep="_") 
 }
 plot.data$TipLabel <- as.factor(plot.data$TipLabel)
 # rownames(plot.data) <- as.character(plot.data$TipLabel)
@@ -115,10 +140,10 @@ plot.data.df <- as.data.frame(plot.data)
 row.names(plot.data.df) <- make.names(as.character(plot.data.df$TipLabel),unique=TRUE)
 plot.data.df <- plot.data.df[plot.tree$tip.label,]
 
-ord <- unique(plot.data.df$Order)
+ord <- unique(plot.data.df$order)
 library(scales)
 q_colors =  length(ord) # for no particular reason
-v_colors =  viridisLite::viridis(q_colors,option="D")
+v_colors =  viridisLite::viridis(q_colors,option="E")   #sets colors according to cividis scale
 
 
 
@@ -136,7 +161,7 @@ head(plot.tree$tip.label)
 head(plot.data.df)
 
 
-tree.angle <- 270
+tree.angle <- 330
 tree.start <- 180
 treeheight <- max(nodeHeights(plot.tree))
 
@@ -181,8 +206,8 @@ plot(plot.tree, type = "fan", open.angle = 360 - tree.angle, rotate = 270,
 plot.data.df$col <- NA
 for (i in 1:length(ord)){
   assign(paste("col.",ord[i],sep=""),v_colors[i])
-  plot.data.df$col[plot.data.df$Order == ord[i]] <- v_colors[i]
-  assign(paste(ord[i],"edge",sep="_"),which.edge(plot.tree, group = row.names(subset(plot.data.df, Order == ord[i]))))
+  plot.data.df$col[plot.data.df$order == ord[i]] <- v_colors[i]
+  assign(paste(ord[i],"edge",sep="_"),which.edge(plot.tree, group = row.names(subset(plot.data.df, order == ord[i]))))
 }
 all <- which.edge(plot.tree, group = row.names(plot.data.df))
 col1 <- plot.data.df$col
@@ -300,7 +325,7 @@ lines(y.0.75 ~ x.0.75, col = "black", lwd = 1.5)
 theta.start+c(1:nrow(plot.data))*theta.subtend
 
 
-# Bars    
+# Bars    # NOT WORKING
 temp.x <- NA
 temp.y <- NA
 temp.theta <- NA
@@ -463,6 +488,8 @@ text(x = -4*bar.offset,
 
 ggsave(file = "Prelim_phylo_full.png", dpi = 600, width = 8, height = 6, units = "in")
 
+
+
 # # Add legend
 # legend("bottomleft",
 #        legend = row.names(tree.plot.colours),
@@ -492,7 +519,7 @@ ggsave(file = "Prelim_phylo_full.png", dpi = 600, width = 8, height = 6, units =
 # # BiocManager::install("ggtree")
 # 
 # library(ggtree)
-# 
-# try <- ggtree(plot.tree) +
-#   geom_text2(aes(subset=!isTip, label=node), hjust=-.3) + geom_tiplab(size = 2)
-# try
+# # testing one option using ggtree
+test.tree <- ggtree(plot.tree, layout = "fan", open.angle = 90) + 
+  geom_tiplab(size = 1) + 
+  theme_tree2()
