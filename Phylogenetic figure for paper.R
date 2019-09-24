@@ -1,7 +1,9 @@
-###########################################################################
-# Phylogenetic tree figure code for fish-plastic meta-analysis from Danuta
-###########################################################################
+####################################
+# Phylogenetic tree figure for paper
+####################################
 
+
+# load data and packages ----
 
 library(tidyverse)
 library(ggtree)
@@ -11,6 +13,11 @@ library(mgcv)
 library(lme4)
 library(gamm4)
 library(readxl)
+library(rotl) #for phylogenetic analyses, get all the species? from Hinchliff et al. 2015 PNAS
+library(phytools)
+library(tidyverse)
+library(stringr)
+
 
 # Abbreviate a binomial e.g. Balaenoptera musculus -> B. musculus
 abbr_binom <- function(binom) {
@@ -30,9 +37,9 @@ d = read_csv("Plastics ingestion records fish master_final.csv") %>%
          prime_forage = na_if(prime_forage, "not listed")) %>% 
   separate(binomial, into = c("genus", "species"), sep = " ", remove = FALSE)
 
-
-d_full <- d_full %>%
+d_full <- d %>%
   filter(includes_microplastic == "Y")
+
 
 # species summary tables
 d_sp_sum <- d_full %>%
@@ -45,58 +52,30 @@ d_sp_sum <- d_full %>%
 
 
 
+# building the basic tree ----
 
-# testing phylogenetic analyses ----
-library(rotl) #for phylogenetic analyses, get all the species? from Hinchliff et al. 2015 PNAS
-library(phytools)
-library(tidyverse)
-library(stringr)
-
-
-#gets the species names
-# taxa <- as.character(d_sp_sum$`Species.name`[1:20])  # this is just a subset, will eventually include all species
-# taxa <- as.character(d_sp_sum$`Species.name`[1:100])  # this is just a subset, will eventually include all species
-# 
-# resolved_names <- tnrs_match_names(taxa)
-# resolved_names <- resolved_names[!is.na(resolved_names$unique_name),] #removing NAs when no match was found (Genus sp. I think)
-breaks <- c(seq(1,nrow(d_sp_sum),50),nrow(d_sp_sum)+1)
-
-##### MAX'S ATTEMPT #####
-for (i in 1:(length(breaks)-1)){
-  # Subset binomials, convert to character, drop missing
-  taxa <- as.character(d_sp_sum$binomial[breaks[i]:(breaks[i+1]-1)])
-  taxa <- taxa[taxa!=""]
-  # Use rotl to look up ottid's
-  resolved_namest <- tnrs_match_names(taxa, "Animals")
-  resolved_namest <- resolved_namest[!is.na(resolved_namest$unique_name),]
-  # Drop ottid's missing from synthetic tree (e.g. incertae sedis)
-  resolved_namest <- resolved_namest[is_in_tree(resolved_namest$ott_id),]
-  if (i==1){
-    resolved_namess <- resolved_namest
-  } else {
-    resolved_namess <- full_join(resolved_namess,resolved_namest)
-  }
-}
-my_tree <- tol_induced_subtree(ott_ids = resolved_names$ott_id, label_format = "name")
-#########################
-
+breaks <- c(seq(1,nrow(d_sp_sum),50),nrow(d_sp_sum)+1)  # why are we doing this?
+ 
 for (i in 1:(length(breaks)-1)){
   taxa <- as.character(d_sp_sum$binomial[breaks[i]:(breaks[i+1]-1)])
-  taxa <- taxa[taxa!=""]
-  resolved_namest <- tnrs_match_names(taxa)
+  taxa <- taxa[taxa != "" & !is.na(taxa)]
+  
+  resolved_namest <- tnrs_match_names(taxa)                          # I think this is where all the extra species fall out
   resolved_namest <- resolved_namest[!is.na(resolved_namest$unique_name),]
   if (i==1){
     resolved_namess <- resolved_namest
   } else {
-    resolved_namess <- full_join(resolved_namess,resolved_namest)
+    resolved_namess <- rbind(resolved_namess, resolved_namest)
   }
 }
 resolved_names <- resolved_namess
 resolved_names <- resolved_names[resolved_names$flags!="INCERTAE_SEDIS_INHERITED",]
 
 #plots species
+
+
 my_tree <- tol_induced_subtree(ott_ids = resolved_names$ott_id, label_format = "name")
-# plot(my_tree, no.margin=TRUE)
+plot(my_tree, no.margin=TRUE)
 
 # tree<-read.tree(my_tree)# not working, but doesnt seem to matter atm
 
@@ -107,16 +86,8 @@ plot.tree <- ladderize(plot.tree, right = TRUE)
 write.tree(plot.tree, "Plotting - tree.phy") 
 plot.tree <- read.tree("Plotting - tree.phy")
 
-# # Mimicing viridis colour palette for colour blindness
-# # https://www.thinkingondata.com/something-about-viridis-library/
-# col.PROCELLARIIFORMES <- "#440154FF" # purple 481567FF
-# col.SPHENISCIFORMES <- "#453781FF" # purple blue
-# col.SULIFORMES <- "#39568CFF" # blue
-# col.PELECANIFORMES <- "#2D708EFF" # dark teal
-# col.GAVIIFORMES <- "#1F968BFF" # teal
-# col.PHAETHONTIFORMES <- "#3CBB75FF" # grean-teal
-# col.CHARADRIIFORMES <- "#73D055FF" # green
-# col.ANSERIFORMES <- "#DCE319FF" # yellow  copy this to line 557 otherwise one branch is pink clcolr[all]  
+
+# adding bells and whistles ----
 
 # # Mimicing viridis colour palette for colour blindness
 # # https://www.thinkingondata.com/something-about-viridis-library/
@@ -152,28 +123,31 @@ col.Beryciformes <- "#3CBB75FF" # grean-teal
 col.Gasterosteiformes <- "#3CBB75FF" # grean-teal
 
 
-
 #Data to plot
 plot.data <- d_sp_sum
 plot.data <- plot.data[plot.data$binomial!="",]
 
 
-
-plot.data$TipLabel <- NA  #SOMETHING BREAKING HERE
+plot.data$TipLabel <- NA
 for(i in 1:nrow(plot.data)){
   oj <- str_locate(plot.data$binomial[i],' ')
   plot.data$TipLabel[i] <- paste(substr(plot.data$binomial[i],1,oj[1]-1),substr(plot.data$binomial[i],oj[1]+1,nchar(as.character(plot.data$binomial[i]))),sep="_") 
 }
-plot.data$TipLabel <- as.factor(plot.data$TipLabel)
+
+plot.data$TipLabel <- as.factor(plot.data$TipLabel)  # this has 366 species though; what happens?!?!?!?
 # rownames(plot.data) <- as.character(plot.data$TipLabel)
 
+
+
 #Species missing from the tree
-# plot.data <- droplevels(plot.data)
+plot.data <- droplevels(plot.data)
 species.list <- as.character(levels(plot.data$TipLabel))
 species.list[!species.list %in% plot.tree$tip.label]
 
-#Remove tips for species that are not in the data set for plotting
+# Remove tips for species that are not in the data set for plotting
 plot.tree <- drop.tip(plot.tree, tip = plot.tree$tip.label[!plot.tree$tip.label %in% plot.data$TipLabel])
+
+
 
 plot.data.df <- as.data.frame(plot.data)
 row.names(plot.data.df) <- make.names(as.character(plot.data.df$TipLabel),unique=TRUE)
@@ -182,29 +156,16 @@ plot.data.df <- plot.data.df[plot.tree$tip.label,]
 ord <- unique(plot.data.df$order)
 library(scales)
 q_colors =  length(ord) # for no particular reason
-v_colors =  viridisLite::viridis(q_colors,option="E")   #sets colors according to cividis scale, I WANT TO CHANGE THIS
-
-
-
-# 
-# plot.data$col[plot.data$Order == "ANSERIFORMES"] <- col.ANSERIFORMES
-# plot.data$col[plot.data$Order == "CHARADRIIFORMES"] <- col.CHARADRIIFORMES
-# plot.data$col[plot.data$Order == "GAVIIFORMES"] <- col.GAVIIFORMES
-# plot.data$col[plot.data$Order == "PHAETHONTIFORMES"] <- col.PHAETHONTIFORMES
-# plot.data$col[plot.data$Order == "PROCELLARIIFORMES"] <- col.PROCELLARIIFORMES
-# plot.data$col[plot.data$Order == "SPHENISCIFORMES"] <- col.SPHENISCIFORMES
-# plot.data$col[plot.data$Order == "SULIFORMES"] <- col.SULIFORMES
-# plot.data$col[plot.data$Order == "PELECANIFORMES"] <- col.PELECANIFORMES
+# v_colors is the palette for orders
+v_colors =  viridisLite::viridis(q_colors, option="E")   #sets colors according to cividis scale, I WANT TO CHANGE THIS
 
 head(plot.tree$tip.label)
 head(plot.data.df)
-
 
 tree.angle <- 330
 tree.start <- 180
 treeheight <- max(nodeHeights(plot.tree))
 
-# consider adding in colors or bars next
 
 # This tree plots, but has issues
 plot(plot.tree, type = "fan", open.angle = 360 - tree.angle, rotate = 270, 
@@ -215,34 +176,8 @@ plot(plot.tree, type = "fan", open.angle = 360 - tree.angle, rotate = 270,
      y.lim = c(-1 * treeheight, 1.2 * treeheight))
 
 
-# #Get the colours
-# ANSERIFORMES_edge      <- which.edge(plot.tree, group = row.names(subset(plot.data, Order == "ANSERIFORMES")))
-# CHARADRIIFORMES_edge   <- which.edge(plot.tree, group = row.names(subset(plot.data, Order == "CHARADRIIFORMES")))
-# GAVIIFORMES_edge       <- which.edge(plot.tree, group = row.names(subset(plot.data, Order == "GAVIIFORMES")))
-# PHAETHONTIFORMES_edge  <- which.edge(plot.tree, group = row.names(subset(plot.data, Order == "PHAETHONTIFORMES")))
-# PROCELLARIIFORMES_edge <- which.edge(plot.tree, group = row.names(subset(plot.data, Order == "PROCELLARIIFORMES")))
-# SPHENISCIFORMES_edge   <- which.edge(plot.tree, group = row.names(subset(plot.data, Order == "SPHENISCIFORMES")))
-# SULIFORMES_edge        <- which.edge(plot.tree, group = row.names(subset(plot.data, Order == "SULIFORMES")))
-# PELECANIFORMES_edge    <- which.edge(plot.tree, group = row.names(subset(plot.data, Order == "PELECANIFORMES")))
-# all                    <- which.edge(plot.tree, group = row.names(plot.data))
-# 
-# ANSERIFORMES_edge      <- which.edge(plot.tree, group = row.names(subset(plot.data, Order == "ANSERIFORMES")))
-# CHARADRIIFORMES_edge   <- which.edge(plot.tree, group = row.names(subset(plot.data, Order != "ANSERIFORMES")))
-# PHAETHONTIFORMES_edge  <- which.edge(plot.tree, group = row.names(subset(plot.data, !(Order == "CHARADRIIFORMES" | Order == "ANSERIFORMES"))))
-# GAVIIFORMES_edge       <- which.edge(plot.tree, group = row.names(subset(plot.data, !(Order == "ANSERIFORMES" | Order == "CHARADRIIFORMES" |
-#                                                                                         Order == "PHAETHONTIFORMES"))))
-# PELECANIFORMES_edge    <- which.edge(plot.tree, group = row.names(subset(plot.data, !(Order == "ANSERIFORMES" | Order == "CHARADRIIFORMES" |
-#                                                                                         Order == "PHAETHONTIFORMES" | Order == "GAVIIFORMES"))))
-# SULIFORMES_edge        <- which.edge(plot.tree, group = row.names(subset(plot.data, !(Order == "ANSERIFORMES" | Order == "CHARADRIIFORMES" |
-#                                                                                         Order == "PHAETHONTIFORMES" | Order == "GAVIIFORMES" |
-#                                                                                         Order == "PELECANIFORMES"))))
-# SPHENISCIFORMES_edge   <- which.edge(plot.tree, group = row.names(subset(plot.data, !(Order == "ANSERIFORMES" | Order == "CHARADRIIFORMES" |
-#                                                                                         Order == "PHAETHONTIFORMES" | Order == "GAVIIFORMES" |
-#                                                                                         Order == "PELECANIFORMES" | Order == "SULIFORMES"))))
-# PROCELLARIIFORMES_edge <- which.edge(plot.tree, group = row.names(subset(plot.data, Order == "PROCELLARIIFORMES")))
-
-
 plot.data.df$col <- NA
+# Create 'taxa'_edge variables
 for (i in 1:length(ord)){
   assign(paste("col.",ord[i],sep=""),v_colors[i])
   plot.data.df$col[plot.data.df$order == ord[i]] <- v_colors[i]
@@ -251,12 +186,6 @@ for (i in 1:length(ord)){
 all <- which.edge(plot.tree, group = row.names(plot.data.df))
 col1 <- plot.data.df$col
 
-# tree.plot.colours <- data.frame(c(col.ANSERIFORMES, col.CHARADRIIFORMES, col.GAVIIFORMES,
-#                                   col.PHAETHONTIFORMES, col.PROCELLARIIFORMES, col.SPHENISCIFORMES, col.SULIFORMES, col.PELECANIFORMES))
-# 
-# row.names(tree.plot.colours) <- c("ANSERIFORMES", "CHARADRIIFORMES", "GAVIIFORMES", 
-#                                   "PHAETHONTIFORMES", "PROCELLARIIFORMES", "SPHENISCIFORMES",
-#                                   "SULIFORMES", "PELECANIFORMES")
 
 tree.plot.colours <- data.frame(c(col.Perciformes, col.Tetraodontiformes, col.Lophiiformes, col.Scorpaeniformes,
                                   col.Gasterosteiformes, col.Pleuronectiformes, col.Beloniformes, col.Atheriniformes, col.Mugiliformes,
@@ -273,7 +202,7 @@ row.names(tree.plot.colours) <- c("Perciformes", "Tetraodontiformes", "Lophiifor
 
 #Colours for the tree CHECK EDGES NOT FOUND
 clcolr<-rep(as.character(tree.plot.colours[ord[1],]), dim(plot.tree$edge)[1]) #vector as long as the first edge column and populating it with the colour for insects
-clcolr[all]    <- "#DE1738" #as.character(tree.plot.colours["ANSERIFORMES",])   # this defines the ingroup and then sets up a vector to colour each edge of the phylogeny depending on whether it is in the group or not
+#clcolr[all]    <- "#DE1738" #as.character(tree.plot.colours["ANSERIFORMES",])   # this defines the ingroup and then sets up a vector to colour each edge of the phylogeny depending on whether it is in the group or not
 clcolr[Perciformes_edge]      <-as.character(tree.plot.colours["Perciformes",])   # this defines the ingroup and then sets up a vector to colour each edge of the phylogeny depending on whether it is in the group or not
 clcolr[Tetraodontiformes_edge]   <-as.character(tree.plot.colours["Tetraodontiformes",])   # this defines the ingroup and then sets up a vector to colour each edge of the phylogeny depending on whether it is in the group or not
 clcolr[Lophiiformes_edge]  <-as.character(tree.plot.colours["Lophiiformes",])   # this defines the ingroup and then sets up a vector to colour each edge of the phylogeny depending on whether it is in the group or not
@@ -302,20 +231,8 @@ clcolr[Rajiformes_edge] <-as.character(tree.plot.colours["Rajiformes",]) # this 
 clcolr[Myliobatiformes_edge] <-as.character(tree.plot.colours["Myliobatiformes",]) # this defines the ingroup and then sets up a vector to colour each edge of the phylogeny depending on whether it is in the group or not
 clcolr[Torpediniformes_edge] <-as.character(tree.plot.colours["Torpediniformes",]) # this defines the ingroup and then sets up a vector to colour each edge of the phylogeny depending on whether it is in the group or not
 
-# #Colours for the tree
-# clcolr<-rep(as.character(tree.plot.colours["ANSERIFORMES",]), dim(plot.tree$edge)[1]) #vector as long as the first edge column and populating it with the colour for insects
-# clcolr[all]    <- "#DCE319FF" #as.character(tree.plot.colours["ANSERIFORMES",])   # this defines the ingroup and then sets up a vector to colour each edge of the phylogeny depending on whether it is in the group or not
-# clcolr[ANSERIFORMES_edge]      <-as.character(tree.plot.colours["ANSERIFORMES",])   # this defines the ingroup and then sets up a vector to colour each edge of the phylogeny depending on whether it is in the group or not
-# clcolr[CHARADRIIFORMES_edge]   <-as.character(tree.plot.colours["CHARADRIIFORMES",])   # this defines the ingroup and then sets up a vector to colour each edge of the phylogeny depending on whether it is in the group or not
-# clcolr[PHAETHONTIFORMES_edge]  <-as.character(tree.plot.colours["PHAETHONTIFORMES",])   # this defines the ingroup and then sets up a vector to colour each edge of the phylogeny depending on whether it is in the group or not
-# clcolr[GAVIIFORMES_edge]       <-as.character(tree.plot.colours["GAVIIFORMES",])   # this defines the ingroup and then sets up a vector to colour each edge of the phylogeny depending on whether it is in the group or not
-# clcolr[PELECANIFORMES_edge]    <-as.character(tree.plot.colours["PELECANIFORMES",])   # this defines the ingroup and then sets up a vector to colour each edge of the phylogeny depending on whether it is in the group or not
-# clcolr[SULIFORMES_edge]        <-as.character(tree.plot.colours["SULIFORMES",])   # this defines the ingroup and then sets up a vector to colour each edge of the phylogeny depending on whether it is in the group or not
-# clcolr[SPHENISCIFORMES_edge]   <-as.character(tree.plot.colours["SPHENISCIFORMES",]) # this defines the ingroup and then sets up a vector to colour each edge of the phylogeny depending on whether it is in the group or not
-# clcolr[PROCELLARIIFORMES_edge] <-as.character(tree.plot.colours["PROCELLARIIFORMES",]) # this defines the ingroup and then sets up a vector to colour each edge of the phylogeny depending on whether it is in the group or not
-# 
 
-par(mar = c(3,3,3,3) + 5, xpd = NA)
+par(mar = c(3,3,3,3) + 5, xpd = NA) # this line makes the plot fit on the screen for print out
 
 # (phylo.plot is from ape package)
 plot(plot.tree, type = "fan", open.angle = 360 - tree.angle, rotate = 270, 
@@ -325,11 +242,12 @@ plot(plot.tree, type = "fan", open.angle = 360 - tree.angle, rotate = 270,
      x.lim = c(-1 * treeheight, 1.2 * treeheight), 
      y.lim = c(-1 * treeheight, 1.2 * treeheight), 
      edge.color = clcolr)
-# text(x = -1.55, # par("usr")[1] + 0.99* (par("usr")[2] - par("usr")[1]),
-#      y = 1.6,   # par("usr")[3] + 0.99* (par("usr")[4] - par("usr")[3]),
-#      labels = "(J)")
+ # text(x = -1.55, # par("usr")[1] + 0.99* (par("usr")[2] - par("usr")[1]),
+ #      y = 1.6,   # par("usr")[3] + 0.99* (par("usr")[4] - par("usr")[3]),
+ #     labels = "(J)")
 
 
+# adding plastic ingestion data onto phylogeny ----
 
 ### Draw Prediction bars, background and labels
 
@@ -416,8 +334,7 @@ for(i in 1:nrow(plot.data.df)){
 }
 
 
-### Add scales
-
+### Add scales ----
 
 # Upper
 lines(y = rep(-0*bar.offset,2), 
@@ -525,10 +442,6 @@ text(x = -4*bar.offset,
      cex = .8,
      pos = 2)
 
-ggsave(file = "Prelim_phylo_full.png", dpi = 600, width = 8, height = 6, units = "in")
-
-
-
 # # Add legend
 # legend("bottomleft",
 #        legend = row.names(tree.plot.colours),
@@ -547,18 +460,5 @@ ggsave(file = "Prelim_phylo_full.png", dpi = 600, width = 8, height = 6, units =
 
 
 
+ggsave(file = "Prelim_phylo_full.png", dpi = 600, width = 8, height = 6, units = "in")
 
-# 
-# ## Trying a plot with ggtree
-# 
-# # jumping through hoops to install ggtree
-# # if (!requireNamespace("BiocManager", quietly = TRUE))
-# #   install.packages("BiocManager")
-# # 
-# # BiocManager::install("ggtree")
-# 
-# library(ggtree)
-# # testing one option using ggtree
-test.tree <- ggtree(plot.tree, layout = "fan", open.angle = 90) + 
-  geom_tiplab(size = 1) + 
-  theme_tree2()

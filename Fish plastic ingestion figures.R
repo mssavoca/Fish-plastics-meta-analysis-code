@@ -70,9 +70,9 @@ d_sp_sum <- d_full %>%
   arrange(-Sp_mean)
 
 
-d_phylo_summ <- d %>% 
-  group_by(binomial) %>% 
-  drop_na(binomial) %>% 
+d_phylo_summ <- d_full %>% 
+  group_by(order) %>% 
+  drop_na(order) %>% 
   summarise(sp = first(species),
             FO_plastic = sum(NwP)/sum(N),
             wgt_mean_plast_num = mean(mean_num_particles_per_indv),
@@ -146,7 +146,7 @@ write_csv(d_vulnerability, "Vulnerability table.csv")
 
 
 # fish of concern for humans
-co156/210ncern_fish <- d %>% 
+concern_fish <- d %>% 
   group_by(common_name, binomial, family, species) %>% 
   filter(commercial %in% c("commercial", "highly commercial")) %>%
   summarize(species_avg = sum(NwP)/sum(N),
