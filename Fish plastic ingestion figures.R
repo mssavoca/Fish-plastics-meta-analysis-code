@@ -73,13 +73,13 @@ d_sp_sum <- d_full %>%
 d_phylo_summ <- d_full %>% 
   group_by(order) %>% 
   drop_na(order) %>% 
-  summarise(sp = first(species),
-            FO_plastic = sum(NwP)/sum(N),
+  summarise(FO_plastic = sum(NwP)/sum(N),
+            # sp = first(species),
+            # TL = first(trophic_level_via_fishbase),
             wgt_mean_plast_num = mean(mean_num_particles_per_indv),
             se_num_plast = SE(mean_num_particles_per_indv),
             sample_size = sum(N),
-            num_studies = n_distinct(source),
-            TL = first(trophic_level_via_fishbase)) %>% 
+            num_studies = n_distinct(source)) %>% 
 #  filter(FO_plastic > 0.1) %>% 
   arrange(desc(FO_plastic))
 

@@ -99,7 +99,6 @@ col.Stomiiformes <- "#1F968BFF" # teal
 col.Aulopiformes <- "#3CBB75FF" # grean-teal
 col.Beloniformes  <- "#73D055FF" # green
 col.Mugiliformes <- "#DCE319FF" # yellow  copy this to line 557 otherwise one branch is pink clcolr[all]
-
 col.Tetraodontiformes <- "#3CBB75FF" # grean-teal
 col.Lampriformes <- "#3CBB75FF" # grean-teal
 col.Siluriformes <- "#3CBB75FF" # grean-teal
@@ -153,14 +152,23 @@ plot.data.df <- as.data.frame(plot.data)
 row.names(plot.data.df) <- make.names(as.character(plot.data.df$TipLabel),unique=TRUE)
 plot.data.df <- plot.data.df[plot.tree$tip.label,]
 
-ord <- unique(plot.data.df$order)
-library(scales)
-q_colors =  length(ord) # for no particular reason
-# v_colors is the palette for orders
-v_colors =  viridisLite::viridis(q_colors, option="E")   #sets colors according to cividis scale, I WANT TO CHANGE THIS
+
+
+#skipping over this section plots edge colors the way I want
+# ord <- unique(plot.data.df$order)
+# library(scales)
+# q_colors =  length(ord) # for no particular reason
+# # v_colors is the palette for orders
+# v_colors =  viridisLite::viridis(q_colors, option="E")   #sets colors according to cividis scale, I WANT TO CHANGE THIS
+
+
 
 head(plot.tree$tip.label)
 head(plot.data.df)
+
+
+
+
 
 tree.angle <- 330
 tree.start <- 180
@@ -176,15 +184,17 @@ plot(plot.tree, type = "fan", open.angle = 360 - tree.angle, rotate = 270,
      y.lim = c(-1 * treeheight, 1.2 * treeheight))
 
 
-plot.data.df$col <- NA
-# Create 'taxa'_edge variables
-for (i in 1:length(ord)){
-  assign(paste("col.",ord[i],sep=""),v_colors[i])
-  plot.data.df$col[plot.data.df$order == ord[i]] <- v_colors[i]
-  assign(paste(ord[i],"edge",sep="_"),which.edge(plot.tree, group = row.names(subset(plot.data.df, order == ord[i]))))
-}
-all <- which.edge(plot.tree, group = row.names(plot.data.df))
-col1 <- plot.data.df$col
+
+# Uncomment out for v_colors
+# plot.data.df$col <- NA
+# # Create 'taxa'_edge variables
+# for (i in 1:length(ord)){
+#   assign(paste("col.",ord[i],sep=""),v_colors[i])
+#   plot.data.df$col[plot.data.df$order == ord[i]] <- v_colors[i]
+#   assign(paste(ord[i],"edge",sep="_"),which.edge(plot.tree, group = row.names(subset(plot.data.df, order == ord[i]))))
+# }
+# all <- which.edge(plot.tree, group = row.names(plot.data.df))
+# col1 <- plot.data.df$col
 
 
 tree.plot.colours <- data.frame(c(col.Perciformes, col.Tetraodontiformes, col.Lophiiformes, col.Scorpaeniformes,
@@ -232,7 +242,7 @@ clcolr[Myliobatiformes_edge] <-as.character(tree.plot.colours["Myliobatiformes",
 clcolr[Torpediniformes_edge] <-as.character(tree.plot.colours["Torpediniformes",]) # this defines the ingroup and then sets up a vector to colour each edge of the phylogeny depending on whether it is in the group or not
 
 
-par(mar = c(3,3,3,3) + 5, xpd = NA) # this line makes the plot fit on the screen for print out
+par(mar = c(3,3,3,3) + 6, xpd = NA) # this line makes the plot fit on the screen for print out
 
 # (phylo.plot is from ape package)
 plot(plot.tree, type = "fan", open.angle = 360 - tree.angle, rotate = 270, 
@@ -460,5 +470,7 @@ text(x = -4*bar.offset,
 
 
 
-ggsave(file = "Prelim_phylo_full.png", dpi = 600, width = 8, height = 6, units = "in")
+# To export, make extent as big as possible, then export as PDF in as PDF
 
+ggsave(file = "Prelim_phylo_full_fit.png", dpi = 600, width = 8, height = 6, units = "in")
+dev.copy2pdf(file="Prelim_phylo_full_fit.pdf", width=14, height=8)
