@@ -1,9 +1,8 @@
-####################################
-# Phylogenetic tree figure for paper
-####################################
+######################################################## 
+# Figures for fish-plastic ingestion meta-analysis paper
+########################################################
 
-
-# load data and packages ----
+#load packages, data, and functions ----
 
 library(tidyverse)
 library(ggtree)
@@ -17,6 +16,7 @@ library(phytools)
 library(tidyverse)
 library(stringr)
 
+SE = function(x){sd(x)/sqrt(sum(!is.na(x)))}
 
 
 # Abbreviate a binomial e.g. Balaenoptera musculus -> B. musculus
@@ -51,8 +51,8 @@ d_sp_sum <- d_full %>%
   ungroup %>% 
   mutate(commercial = factor(commercial),
          studies_cat = as.double(cut(num_studies, 
-                           c(0, 1, 3, 6),
-                           c(1,2,3))),
+                                     c(0, 1, 3, 6),
+                                     c(1,2,3))),
          commercial = fct_collapse(commercial,
                                    Commercial = c("commercial", "highly commercial"),
                                    Minor = c("minor commercial", "subsistence"),
@@ -60,7 +60,11 @@ d_sp_sum <- d_full %>%
   arrange(-Sp_mean)
 
 
-# building the basic tree ----
+
+
+# Phylogenetic tree figure for paper, Figure 1 ----
+
+# building the basic tree 
 
 breaks <- c(seq(1,nrow(d_sp_sum),50),nrow(d_sp_sum)+1)  # why are we doing this?
 
@@ -80,8 +84,6 @@ resolved_names <- resolved_namess
 resolved_names <- resolved_names[resolved_names$flags!="INCERTAE_SEDIS_INHERITED",]
 
 #plots species
-
-
 my_tree <- tol_induced_subtree(ott_ids = resolved_names$ott_id, label_format = "name")
 
 my_tree$tip.label<-gsub("_"," ",my_tree$tip.label) # removes underscore between genus and species names
@@ -107,14 +109,14 @@ my_tree$tip.label <- as.factor(my_tree$tip.label)
 p %<+% d_sp_sum + 
   aes(color = Sp_mean) +
   geom_tiplab2(aes(label = paste0("italic('", label, "')"),
-                    color=Sp_mean, angle = angle), parse = TRUE,
+                   color=Sp_mean, angle = angle), parse = TRUE,
                size = 6, align = FALSE, hjust = -0.05) +
   geom_tippoint(aes(color = Sp_mean, shape = commercial, size = studies_cat)) +
   scale_color_gradientn(colours = c("steelblue4",
                                     "gray40",
                                     "coral", "coral1",
                                     "firebrick2", "firebrick3", "firebrick4"), 
-                       name = "Proportion with \ningested plastic") +
+                        name = "Proportion with \ningested plastic") +
   #scale_size(range = c(3, 7)) +
   scale_size_continuous(guide = FALSE, range = c(3, 7)) +
   labs(shape = "Commercial \nstatus") +
@@ -131,51 +133,53 @@ dev.copy2pdf(file="Prelim_phylo_ggtree2.pdf", width=35, height=35)
 ggsave("Prelim_phylo_ggtree2.jpg", width = 35, height = 35, units = "in")
 
 
+# risk/interest plot, either figure 1B or supplementary ----
+risk_plot <- d_sp_sum %>% 
+  drop_na(commercial) %>% 
+  ggplot(aes(log10(Sample_size), Sp_mean)) +
+  geom_point(aes(color = Sp_mean, shape = commercial, size = studies_cat), 
+             alpha = 0.8) +
+  geom_hline(yintercept = 0.25, linetype="dashed", color = "grey50") +
+  geom_vline(xintercept = log10(25), linetype="dashed", color = "grey50") +
+  xlab("Log[Sample Size]") +
+  ylab("Species-specific plastic ingestion incidence (FO)") +
+  labs(shape = "Commercial status", shape = "Commercial Status", size =  "Number of studies") +
+  scale_color_gradientn(colours = c("steelblue4",
+                                    "gray40",
+                                    "coral", "coral1",
+                                    "firebrick2", "firebrick3", "firebrick4"), 
+                        name = "Proportion with \ningested plastic") +
+  scale_size_continuous(breaks = seq(from = 1, to = 3, by = 1), 
+                        labels = c("Poorly studied (n=1)", "Moderately studied (n=2-3)", "Well studied (n=4-6)"),
+                        range = c(1.5, 5)) +
+  annotate("text", x = c(0.6, 2.8, 0.6, 2.8),
+           y=c(0.9, 0.9, 0.08, 0.08),
+           label = c("high incidence, data poor", "high incidence, data rich",
+                     "low incidence, data poor", "low incidence, data rich")) +
+  theme_classic(base_size = 16)
+risk_plot
+
+dev.copy2pdf(file="risk_plot.pdf", width=12, height=7)
 
 
+# Figure 3, plastic ingestion by depth and habitat ----
 
+Fig_3 <- ggplot(filter(d, Found != "NA"), 
+               aes(average_depth, prop_w_plastic, size = N, weight = N)) +
+  geom_point(alpha = 0.4) + 
+  geom_smooth(col = "blue", method = "loess", se = TRUE) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  facet_wrap(~ Found, scales = "free_y", ncol = 1) +
+  coord_flip() +
+  scale_x_reverse() +
+  xlim(1500,0) +
+  xlab("Average depth") +
+  ylab("Proportion of individuals with ingested plastic") +
+  theme_classic(base_size = 16)
+  # theme(axis.text.x = element_text(size=12),
+  #       axis.text.y = element_text(size=12),
+  #       axis.title=element_text(size=13, face="bold"),
+  #       strip.text = element_text(size = 12)) 
+Fig_3 + guides(size = FALSE)
 
- # other options
-
-# first plot try, vertical layout with data ----
-p_stand <- ggtree(my_tree) + 
-  #geom_text2(aes(label=label), hjust=-.2, size=4) +
-  ggplot2::xlim(0, 1.2)
-p_stand
-
-# Adding data
-p_stand %<+% d_sp_sum +
-  aes(color = Sp_mean) +
-  geom_tiplab(aes(color=Sp_mean), align = TRUE, size = 3) +
-  scale_color_gradientn(colours = c("#053061" ,"#2166AC", "#4393C3", "#F4A582", "#D6604D", "#B2182B", "#67001F"), 
-                         name = "Proportion with \nplastic") +
-  geom_hilight(node=1, fill="gold") + 
-  theme(legend.position = c(0.2,0.8))
-
-
-p2 <- facet_plot(p_stand, panel = 'Prop w plastic', data = d_sp_sum, 
-                 geom = ggstance::geom_barh, 
-                 mapping = aes(x = Sp_mean), 
-                 stat='identity') 
-p2
-
-geom_facet(
-
-inset(my_tree, d_sp_sum$Sp_mean, width=0.2, height=0.15, hjust=-1)
-        
-        
-         legend.title = element_blank(), # no title
-        legend.key = element_blank()) # no keys
-  
-  
-  
-  geom_tippoint(aes(color=order))
-
-
-
-  geom_tiplab(aes(color = Sp_mean))
-
-
-p %<+% dd + geom_text(aes(color=, label=label), hjust=-0.5)
-
-
+dev.copy2pdf(file="Fig_3.pdf", width=7, height=10)

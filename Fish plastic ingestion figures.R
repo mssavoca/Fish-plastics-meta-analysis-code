@@ -55,7 +55,10 @@ d_full <- d %>%
 #                            Habitat %in% c("pelagic-neritic", "pelagic-oceanic", "mesopelagic", "bathypelagic") ~ "pelagic")) %>% 
 #   filter(!is.na(`Prop w plastic`))
 
-         
+# average number of plastic particles per individual   
+d %>% filter(prop_w_plastic > 0) %>% 
+  drop_na(mean_num_particles_per_indv) %>% 
+  summarise(avg = mean(mean_num_particles_per_indv), se = SE(mean_num_particles_per_indv)) 
 
 # summary tables ----
 # some summary tables
@@ -271,7 +274,7 @@ polygon <- shape@polygons
 
 
 # risk/interest plot, do color by order, shape by Commercial
-risk_plot <- d %>% 
+risk_plot <- d_sp_sum %>% 
 #  filter(!species %in% c("sp.", "spp.")) %>%
   group_by(binomial, commercial) %>%
   summarize(Sp_mean = mean(prop_w_plastic),
@@ -282,6 +285,9 @@ risk_plot <- d %>%
          studies_cat = cut(num_studies, 
                            c(0, 1, 3, 6),
                            c("Poorly studied (n=1)", "Moderately studied (n=2-3)", "Well studied (n=4-6)")),
+         studies_cat_num = as.double(cut(num_studies, 
+                           c(0, 1, 3, 6),
+                           c(1,2,3))),
          commercial = fct_collapse(commercial,
                                    Commercial = c("commercial", "highly commercial"),
                                    Minor = c("minor commercial", "subsistence"),
@@ -289,20 +295,31 @@ risk_plot <- d %>%
   arrange(num_studies) %>% 
   drop_na(commercial) %>% 
   ggplot(aes(log10(Sample_size), Sp_mean)) +
-  geom_point(aes(color = commercial, shape = studies_cat), size =2) +
+  geom_point(aes(color = Sp_mean, shape = commercial, size = studies_cat_num), 
+             alpha = 0.8) +
   geom_hline(yintercept = 0.25, linetype="dashed", color = "grey50") +
   geom_vline(xintercept = log10(25), linetype="dashed", color = "grey50") +
   #facet_wrap(~ commercial) +
   xlab("Log[Sample Size]") +
   ylab("Species-specific plastic ingestion incidence (FO)") +
-  labs(color = "Commercial status", shape = "Number of studies") +
-  scale_color_manual(values = c("red","blue", "black")) +
+  labs(shape = "Commercial status", shape = "Commercial Status", size =  "Number of studies") +
+  #scale_color_manual(values = c("red","blue", "black")) +
+  scale_color_gradientn(colours = c("steelblue4",
+                                    "gray40",
+                                    "coral", "coral1",
+                                    "firebrick2", "firebrick3", "firebrick4"), 
+                        name = "Proportion with \ningested plastic") +
+  scale_size_continuous(breaks = seq(from = 1, to = 3, by = 1), 
+                        labels = c("Poorly studied (n=1)", "Moderately studied (n=2-3)", "Well studied (n=4-6)"),
+                        range = c(1.5, 5)) +
   annotate("text", x = c(0.6, 3.8, 0.6, 3.8),
            y=c(0.9, 0.9, 0.06, 0.055),
            label = c("high incidence, data poor", "high incidence, data rich",
                      "low incidence, data poor", "low incidence, data rich")) +
   theme_classic(base_size = 14)
 risk_plot
+
+dev.copy2pdf(file="risk_plot.pdf", width=11, height=7)
 
 binom_plot <- ggplot(filter(d, includes_microplastic != "NA"), 
                      aes(publication_year, includes_microplastic)) +
