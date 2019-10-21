@@ -1,5 +1,4 @@
 ## Alex prepping data for longhurst province figure ##
-<<<<<<< HEAD
 # load packages and data ----
 library(tidyverse)
 library(gbm)
@@ -10,50 +9,41 @@ library(gamm4)
 library(readxl)
 library(readr)
 library(ggplot2)
-=======
->>>>>>> master
 
-data <- read.csv("Plastics ingestion records fish master_UDPATED_AGM-MSS2.csv")
+data <- read.csv("Plastics ingestion records fish master_final.csv")
 
 # want to get average proportion of plastic per province
 summary(data)
-<<<<<<< HEAD
 head(data)
 # data of interest
-data2 <- data[,c("Species.name", "Oceanographic.province..from.Longhurst.2007.", "Prop.w.plastic", "NwP", "N", "Source")]
+data2 <- data[,c("Binomial", "Oceanographic.province..from.Longhurst.2007.", "Prop.w.plastic", "NwP", "N", "Source")]
 head(data2)
 colnames(data2) <- c("Species", "OceanProv", "PropPlastic", "NwP", "N", "Source")
-=======
-
-# data of interest
-data2 <- data[,c("Oceanographic.province..from.Longhurst.2007.", "Prop.w.plastic")]
-head(data2)
-colnames(data2) <- c("OceanProv", "PropPlastic")
->>>>>>> master
 head(data2)
 length(table(data2$OceanProv))
 data3<- data2[order(data2$OceanProv),]
 head(data3)
-<<<<<<< HEAD
 
+levels(data3$OceanProv) <- c(levels(data3$OceanProv), "CHIL", "BPLR", "NASE", "NPPF") # need to change these to match the publicly available shape file
+data3$OceanProv[data3$OceanProv=="BPRL"] <- "BPLR"
+data3$OceanProv[data3$OceanProv=="HUMB"] <- "CHIL"
+data3$OceanProv[data3$OceanProv=="NAST E"] <- "NASE"
+data3$OceanProv[data3$OceanProv=="NPSE"] <- "NPPF"
 
-=======
 table(data3$OceanProv)
->>>>>>> master
-
+data3$OceanProv <- droplevels(data3$OceanProv)
 ### set up new dataframe 
-prov <- unique(data3$OceanProv)[-1]
+prov <- unique(data3$OceanProv)
 prov
-<<<<<<< HEAD
 length(prov)
 aveplast <- rep(NA, length(prov))
 numfish <- rep(NA, length(prov))
 numstudies <- rep(NA, length(prov))
 numspecies <- rep(NA, length(prov))
-normalized <- rep(NA, lenght(prov))
+normalized <- rep(NA, length(prov))
 
 ## using this to double check the produced averages
-sub <- data3[data3$OceanProv=="CHIL",]
+sub <- data3[data3$OceanProv=="BPLR",]
 sub
 unique(sub$Source)
 length(unique(sub$Source))
@@ -89,6 +79,8 @@ numspecies
 
 newdat <- data.frame(prov, aveplast, numfish, numstudies, numspecies, normalized)
 newdat
+
+
 
 ## binning data
 # ave plastic
@@ -166,28 +158,3 @@ nrow(Geo_summ_pt2)
 ncol(Geo_summ_pt2)
 
 write.table(Geo_summ_pt2, file = "Geo_summ_pt2.txt", sep = ",", quote = FALSE, row.names = F)
-=======
-aveplast <- rep(NA, length(prov)) 
-na.omit(data3)
-table(data3$OceanProv)
-
-## using this to double check the produced averages
-sub <- data3[data3$OceanProv=="BRAZ",]
-sub
-mean(sub$PropPlastic) #3 = .1077803
-
-for (i in 1:length(prov)){
-  sub <- data3[data3$OceanProv==prov[i],]
-  aveplast[i] <- mean(sub$PropPlastic)
-}
-
-aveplast
-
-newdat <- data.frame(prov, aveplast)
-write.csv(newdat, file="AveragePlasticCount.csv")
-
-# now to rename according to the QGIS shape file
-# BPRL --> BPLR
-# HUMB == CHIL on this map
-# NAST E --> NASE
->>>>>>> master
