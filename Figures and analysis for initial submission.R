@@ -97,7 +97,7 @@ my_tree <- ladderize(my_tree, right = TRUE)
 #my_tree2 = phylo4d(my_tree, d_sp_sum)
 
 
-# first plot try, fan layout ----
+# first plot try, fan layout
 p <- ggtree(my_tree, layout="fan", open.angle=0) + 
   #geom_text2(aes(label=label), hjust=-.2, size=4) +
   ggplot2::xlim(-0.6, 1.3) 
@@ -183,3 +183,88 @@ Fig_3 <- ggplot(filter(d, Found != "NA"),
 Fig_3 + guides(size = FALSE)
 
 dev.copy2pdf(file="Fig_3.pdf", width=7, height=10)
+
+# Figure 4, species accumulation curves----
+## Cumulative unique entries in list of vectors
+cum_unique <- function(l) {
+  result <- integer(length(l))
+  for (i in 1:length(l)) {
+    result[i] <- length(unique(unlist(l[1:i])))
+  }
+  result
+}
+d_rarefaction_all <-  d_full %>% 
+  group_by(publication_year) %>% 
+  summarize(species = list(unique(binomial)),
+            annual_N = sum(N)) %>% 
+  ungroup %>% 
+  mutate(cum_species = cum_unique(species),
+         cum_n = cumsum(annual_N),
+         cpue = cum_species / cum_n)
+d_rarefaction_ingest_only <-  d_full %>%  
+  filter(prop_w_plastic > 0) %>% 
+  group_by(publication_year) %>% 
+  summarize(species = list(unique(binomial)),
+            annual_N = sum(N)) %>% 
+  ungroup %>% 
+  mutate(cum_species = cum_unique(species),
+         cum_n = cumsum(annual_N),
+         cpue = cum_species / cum_n)
+
+rarefaction_plot <- ggplot() +
+  geom_line(data = d_rarefaction_all, aes(cum_n, cum_species), color = "dark blue") +
+  geom_line(data = d_rarefaction_ingest_only, aes(cum_n, cum_species), color = "dark red") +
+  geom_point(data = d_rarefaction_all, aes(cum_n, cum_species)) +
+  geom_point(data = d_rarefaction_ingest_only, aes(cum_n, cum_species)) +
+  geom_text_repel(data = d_rarefaction_all, 
+                  aes(cum_n, cum_species, label = publication_year), 
+                  nudge_x = -1500, nudge_y = 10,
+                  segment.color = "black") +
+  geom_text_repel(data = d_rarefaction_ingest_only, 
+                  aes(cum_n, cum_species, label = publication_year), 
+                  nudge_x = 1500, nudge_y = -10,
+                  segment.color = "black") +
+  labs(x = "Cumulative number of individuals sampled",
+       y = "Cumuluative number of species sampled") + 
+  theme_classic(base_size = 14)
+rarefaction_plot
+
+
+
+
+# Figure S1, number of studies over time----
+study_hist <- d %>% 
+  group_by(publication_year) %>% 
+  summarize(n_studies = n_distinct(source)) %>% 
+  ggplot(aes(publication_year, n_studies)) + 
+  geom_bar(stat = "identity") + 
+  geom_smooth(se = FALSE) +
+  theme_classic(base_size = 14) +
+  xlab("Publication year") + 
+  ylab("Number of studies") 
+study_hist 
+
+
+######################################################### 
+# Modeling for fish-plastic ingestion meta-analysis paper
+#########################################################
+
+# trying out some GAMMs in gamm4, feel free to try with mgcv too
+
+# wrapper fucntion  needed to allow MuMIn to compare models
+gamm4 <- function(...) structure(c(gamm4::gamm4(...), list(call = match.call())), class = c("gamm", "list"))  
+
+d_full_wo_gaps <- d %>%
+  filter(includes_microplastic == "Y") %>% 
+  drop_na(average_depth, Found, trophic_level_via_fishbase, prime_forage) 
+
+# model testing ecological variables
+gamm4_FwP <- gamm4(cbind(NwP, N-NwP) ~ s(trophic_level_via_fishbase) + s(scale(average_depth)) + Found + prime_forage, 
+                   random = ~(1|order) + (1|source), 
+                   data = d_full_wo_gaps, family = binomial)
+summary(gamm4_FwP$gam)
+plot(gamm4_FwP$gam)
+
+
+
+
