@@ -72,6 +72,15 @@ d_sp_sum <- d_full %>%
   ungroup %>% 
   arrange(-Sp_mean)
 
+d_sp_sum2 <- d_full %>%
+  #filter(!species %in% c("sp.", "spp.")) %>%
+  #filter(commercial %in% c("commercial", "highly commercial")) %>% 
+  group_by(binomial, order, commercial, average_depth, habitat) %>%
+  summarize(Sp_mean = mean(prop_w_plastic),
+            Sample_size = sum(N),
+            num_studies = n_distinct(source)) %>%
+  ungroup %>% 
+  arrange(-Sp_mean)
 
 d_phylo_summ <- d_full %>% 
   group_by(order) %>% 
@@ -611,9 +620,20 @@ MCMCglmm_FwP <- MCMCglmm(prop_w_plastic ~ scale(average_depth) + Found + prime_f
 # playing with a BRT ----
 
 ## I think this is what I want, check with Steph
-gbmFwP <- gbm.step(data=d, 
-                   gbm.x = c(3,6,16,18,27,35), 
-                   gbm.y = 9,   # this is NwP
+d_full_wo_gaps <- d_full %>% 
+  drop_na(order,trophic_level_via_fishbase, habitat, prime_forage, average_depth, oceanographic_province_from_longhurst_2007)
+
+d_test <- d_full %>%  
+  slice(1:100) %>% 
+  select(prop_w_plastic, order,trophic_level_via_fishbase, habitat, prime_forage, average_depth, oceanographic_province_from_longhurst_2007) %>% 
+  drop_na() %>% 
+  mutate(prop_w_plastic = numeric(prop_w_plastic),
+         trophic_level_via_fishbase = numeric(trophic_level_via_fishbase),
+         average_depth = numeric(average_depth))
+
+gbmFwP <- gbm.step(data=d_test, 
+                   gbm.x = 2:7, 
+                   gbm.y = 1,   # this is Prop w plastic, 34 is Prop w plastic multiplied by the assessment's sample size
                    #weights = 8,  # weighted by sample size
                    family = "gaussian", 
                    tree.complexity = 5,
