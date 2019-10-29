@@ -258,13 +258,42 @@ d_full_wo_gaps <- d %>%
   filter(includes_microplastic == "Y") %>% 
   drop_na(average_depth, Found, trophic_level_via_fishbase, prime_forage) 
 
-# model testing ecological variables
-gamm4_FwP <- gamm4(cbind(NwP, N-NwP) ~ s(trophic_level_via_fishbase) + s(scale(average_depth)) + Found + prime_forage, 
+
+
+# model testing both ecological and geographic variables
+gamm4_FwP_eco_geo <- gamm4(cbind(NwP, N-NwP) ~ s(trophic_level_via_fishbase) + s(scale(average_depth)) + Found + prime_forage + oceanographic_province_from_longhurst_2007, 
                    random = ~(1|order) + (1|source), 
                    data = d_full_wo_gaps, family = binomial)
-summary(gamm4_FwP$gam)
-plot(gamm4_FwP$gam)
+summary(gamm4_FwP_eco_geo$gam)
+summary(gamm4_FwP_eco_geo$dev.expl)
+plot(gamm4_FwP_eco_geo$gam)
 
 
 
 
+# model testing ecological variables
+gamm4_FwP_eco <- gamm4(cbind(NwP, N-NwP) ~ s(trophic_level_via_fishbase) + s(scale(average_depth)) + Found + prime_forage, 
+                           random = ~(1|order) + (1|source), 
+                           data = d_full_wo_gaps, family = binomial)
+summary(gamm4_FwP_eco$gam)
+summary(gamm4_FwP_eco$dev.expl)
+plot(gamm4_FwP_eco$gam)
+
+
+
+
+# model testing geographic variable
+gamm4_geo <- gamm4(cbind(NwP, N-NwP) ~ oceanographic_province_from_longhurst_2007, 
+                   random = ~(1|order) + (1|source), 
+                   data = d_full_wo_gaps, family = binomial)
+summary(gamm4_geo$gam)
+plot(gamm4_geo$gam)
+
+
+
+# model testing ecological variables
+gamm4_null <- gamm4(cbind(NwP, N-NwP) ~ 1, 
+                   random = ~(1|order) + (1|source), 
+                   data = d_full_wo_gaps, family = binomial)
+summary(gamm4_null$gam)
+plot(gamm4_null$gam)
