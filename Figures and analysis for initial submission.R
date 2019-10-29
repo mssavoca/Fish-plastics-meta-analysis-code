@@ -164,7 +164,7 @@ dev.copy2pdf(file="risk_plot.pdf", width=12, height=7)
 
 # Figure 3, plastic ingestion by depth and habitat ----
 
-Fig_3 <- ggplot(filter(d, Found != "NA"), 
+Fig_3 <- ggplot(filter(d_full, Found != "NA"), 
                aes(average_depth, prop_w_plastic, size = N, weight = N)) +
   geom_point(alpha = 0.4) + 
   geom_smooth(col = "blue", method = "loess", se = TRUE) +
@@ -267,7 +267,6 @@ gamm4_FwP_eco_geo <- gamm4(cbind(NwP, N-NwP) ~ s(trophic_level_via_fishbase) + s
 summary(gamm4_FwP_eco_geo$gam)
 summary(gamm4_FwP_eco_geo$dev.expl)
 plot(gamm4_FwP_eco_geo$gam)
-
 
 
 
