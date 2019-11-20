@@ -142,30 +142,74 @@ newdat$aveplast
 sort(newdat$numstudies)
 sort(newdat$numfish)
 head(newdat)
-write.csv(newdat, "Longhurst_FishSummaryData_fullbinned.csv")
+#write.csv(newdat, "Longhurst_FishSummaryData_fullbinned.csv")
 
 
-
-### Mapping in R
+############################ Spatial Data Analysis/Mapping #################################
 library(sf)
+library(rgdal)
+library(raster)
+library(maptools)
 #note that to read in the shape file you need the full address (https://datacarpentry.org/r-raster-vector-geospatial/06-vector-open-shapefile-in-r/)
-lh_prov <- st_read("/Users/test/Box Sync/Microplastics/Fish-plastics-meta-analysis-code/longhurst_v4_2010/Longhurst_world_v4_2010.shp")
+# ggplot2 will only work with a data.frame object
 
-lh_map <- ggplot() + 
-  geom_sf(data = lh_prov) + 
-  ggtitle("Longhurst Provs") + 
-  coord_sf()
+lh_prov <- st_read("~/Box Sync/Microplastics/Fish-plastics-meta-analysis-code/longhurst_v4_2010/Longhurst_world_v4_2010.shp")
+lh_prov
+lh_prov.2 <- fortify(lh_prov) #fortify makes this into a data frame object
 
+####### calculating centroids for labels ###
+centroids.df <- as.data.frame(st_centroid(lh_prov.2))
+head(centroids.df)
+
+
+joined<- right_join(lh_prov.2,newdat, by=c("ProvCode"="prov"))
+head(joined)
+class(joined)
+centroids.df <- as.data.frame(st_centroid(joined))
+centroids.df
+centroids.coords <- st_coordinates(centroids.df$geometry)
+centroids.coords 
+nrow(centroids.coords)
+### combining all of the polygon data for the provinces for which we have data
+full_data <- cbind(joined, centroids.coords)
+
+class(full_data)
+full_data #X and Y correspond to the centroid of the polygon
+class(full_data)
+
+######### Base map #### STUCK
+lh_map <- ggplot(lh_prov) + 
+  geom_sf() +
+  coord_sf() + theme(panel.grid.major = element_blank(),
+                     panel.grid.minor = element_blank(),
+                     # Remove panel background
+                     panel.background = element_blank())
+#lh_map
 class(lh_map)
 
-
-# now joining the binned data to the LH provs
-head(newdat)
-joined<- right_join(lh_prov, newdat, by=c("ProvCode"="prov")) #tells us how to join them (need to specify which columns to join)
-
 ## mapping with attributes
-ggplot(joined) + 
-  geom_sf(data=joined, aes(fill=aveplastbin)) 
-## needs to include areas with 0s 
 
 
+## average plastic binned
+library(viridis)
+aveplastmap<- lh_map+
+              geom_sf(data=full_data, aes(fill=aveplastbin)) + scale_fill_brewer(palette="YlOrRd") + labs(fill = "Average Plastic Ingested") #+ geom_text(aes(label = full_data$ProvCode, x = full_data$X, y = full_data$Y))
+
+aveplastmap
+
+
+
+## number of studies binned
+numstudiesmap <-  lh_map+
+              geom_sf(data=joined, aes(fill=aveplastbin)) + scale_fill_brewer(palette="YlGn")
+
+
+
+
+
+######### average plastic pollution map ################
+abund <- read.csv("~/Box Sync/Microplastics/Fish-plastics-meta-analysis-code/Global pollution_map files/vansebillemodel_abundance.csv")
+poll_lat <- read.csv("~/Box Sync/Microplastics/Fish-plastics-meta-analysis-code/Global pollution_map files/latitudes.csv")
+poll_lon <- read.csv("~/Box Sync/Microplastics/Fish-plastics-meta-analysis-code/Global pollution_map files/longitudes.csv")
+
+raster(abund)
