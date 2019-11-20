@@ -11,7 +11,7 @@ library(readr)
 library(ggplot2)
 
 data <- read.csv("Plastics ingestion records fish master_final.csv")
-
+nrow(data)
 # want to get average proportion of plastic per province
 summary(data)
 head(data)
@@ -32,6 +32,7 @@ data3$OceanProv[data3$OceanProv=="NPSE"] <- "NPPF"
 
 table(data3$OceanProv)
 data3$OceanProv <- droplevels(data3$OceanProv)
+levels(data3$OceanProv)
 ### set up new dataframe 
 prov <- unique(data3$OceanProv)
 prov
@@ -43,16 +44,16 @@ numspecies <- rep(NA, length(prov))
 normalized <- rep(NA, length(prov))
 
 ## using this to double check the produced averages
-sub <- data3[data3$OceanProv=="BPLR",]
+sub <- data3[data3$OceanProv=="CHIN",]
 sub
 unique(sub$Source)
 length(unique(sub$Source))
-overallprop <- sum(sub$NwP)/sum(sub$N)
+overallprop <- sum(sub$NwP, na.rm=T)/sum(sub$N, na.rm=T)
 overallprop
-normalized <- overallprop*sum(sub$N)
+normalized <- overallprop*sum(sub$N, na.rm=T)
 normalized
-sum(sub$N)
-mean(sub$PropPlastic) #3 = .1077803
+sum(sub$N, na.rm=T)
+mean(sub$PropPlastic, na.rm=T) #3 = .1077803
 sum(sub$N)
 nrow(sub)
 length(unique(sub$Species))
@@ -61,11 +62,11 @@ length(unique(sub$Species))
 
 for (i in 1:length(prov)){
   sub <- data3[data3$OceanProv==prov[i],]
-  aveplast[i] <- sum(sub$NwP)/sum(sub$N)
-  numfish[i] <- sum(sub$N)
+  aveplast[i] <- sum(sub$NwP, na.rm=T)/sum(sub$N, na.rm=T)
+  numfish[i] <- sum(sub$N, na.rm=T)
   numstudies[i] <- length(unique(sub$Source))
   numspecies[i] <- length(unique(sub$Species))
-  normalized[i] <- aveplast[i]*sum(sub$N)
+  normalized[i] <- aveplast[i]*sum(sub$N, na.rm=T)
 }
 
 aveplast
@@ -140,21 +141,31 @@ head(newdat, 50)
 newdat$aveplast
 sort(newdat$numstudies)
 sort(newdat$numfish)
+head(newdat)
 write.csv(newdat, "Longhurst_FishSummaryData_fullbinned.csv")
 
 
-newdat
 
-### Summary table:
-# geographic summary of data
-Geo_summ_pt2 <- newdat %>% 
-  group_by(`prov`) %>% 
-  summarize(num_studies = numstudies,
-            num_sp = numspecies,
-            num_ind_studied = numfish)
+### Mapping in R
+library(sf)
+#note that to read in the shape file you need the full address (https://datacarpentry.org/r-raster-vector-geospatial/06-vector-open-shapefile-in-r/)
+lh_prov <- st_read("/Users/test/Box Sync/Microplastics/Fish-plastics-meta-analysis-code/longhurst_v4_2010/Longhurst_world_v4_2010.shp")
 
-Geo_summ_pt2
-nrow(Geo_summ_pt2)
-ncol(Geo_summ_pt2)
+lh_map <- ggplot() + 
+  geom_sf(data = lh_prov) + 
+  ggtitle("Longhurst Provs") + 
+  coord_sf()
 
-write.table(Geo_summ_pt2, file = "Geo_summ_pt2.txt", sep = ",", quote = FALSE, row.names = F)
+class(lh_map)
+
+
+# now joining the binned data to the LH provs
+head(newdat)
+joined<- right_join(lh_prov, newdat, by=c("ProvCode"="prov")) #tells us how to join them (need to specify which columns to join)
+
+## mapping with attributes
+ggplot(joined) + 
+  geom_sf(data=joined, aes(fill=aveplastbin)) 
+## needs to include areas with 0s 
+
+
