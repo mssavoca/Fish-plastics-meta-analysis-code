@@ -1,0 +1,55 @@
+"","ProvCode","ProvDescr","adjacency","mean_poll_abund"
+"1","BPLR","Polar - Boreal Polar Province (POLR)",1,9663.71324313031
+"2","ARCT","Polar - Atlantic Arctic Province",0,6193.1957259217
+"3","SARC","Polar - Atlantic Subarctic Province",1,16199.7969266994
+"4","NADR","Westerlies - N. Atlantic Drift Province (WWDR)",0,10177.2048165138
+"5","GFST","Westerlies - Gulf Stream Province",0,24057.6873484848
+"6","NASW","Westerlies - N. Atlantic Subtropical Gyral Province (West) (STGW)",0,81842.3950617284
+"7","NATR","Trades - N. Atlantic Tropical Gyral Province (TRPG)",0,28835.0726278409
+"8","WTRA","Trades - Western Tropical Atlantic Province",0,3965.39684773973
+"9","ETRA","Trades - Eastern Tropical Atlantic Province",0,11682.9902185618
+"10","SATL","Trades - South Atlantic Gyral Province (SATG)",0,106142.275394837
+"11","NECS","Coastal - NE Atlantic Shelves Province",1,35338.4870923605
+"12","CNRY","Coastal - Canary Coastal Province (EACB)",1,67659.8609994667
+"13","GUIN","Coastal - Guinea Current Coastal Province",1,24040.2091744186
+"14","GUIA","Coastal - Guianas Coastal Province",0,12377.6520342593
+"15","NWCS","Coastal - NW Atlantic Shelves Province",1,10832.7485795455
+"16","MEDI","Westerlies - Mediterranean Sea, Black Sea Province",1,8335796.54279221
+"17","CARB","Trades - Caribbean Province",1,11283.5325251989
+"18","NASE","Westerlies - N. Atlantic Subtropical Gyral Province (East) (STGE)",0,42777.1133928571
+"19","BRAZ","Coastal - Brazil Current Coastal Province",1,28014.49299
+"20","FKLD","Coastal - SW Atlantic Shelves Province",1,829.544552196532
+"21","BENG","Coastal - Benguela Current Coastal Province",1,23830.487053268
+"22","MONS","Trades - Indian Monsoon Gyres Province",0,31619.5292986111
+"23","ISSG","Trades - Indian S. Subtropical Gyre Province",0,71046.8233704918
+"24","EAFR","Coastal - E. Africa Coastal Province",1,68234.4388012618
+"25","REDS","Coastal - Red Sea, Persian Gulf Province",1,70830.7557377049
+"26","ARAB","Coastal - NW Arabian Upwelling Province",1,19235.3746014493
+"27","INDE","Coastal - E. India Coastal Province",1,110301.997101449
+"28","INDW","Coastal - W. India Coastal Province",1,45652.0912280702
+"29","AUSW","Coastal - Australia-Indonesia Coastal Province",1,22966.4589831933
+"30","BERS","Polar - N. Pacific Epicontinental Province",1,25883.9968329542
+"31","PSAE","Westerlies - Pacific Subarctic Gyres Province (East)",0,25422.4524936387
+"32","PSAW","Westerlies - Pacific Subarctic Gyres Province (West)",0,15499.095
+"33","KURO","Westerlies - Kuroshio Current Province",1,177725.910295082
+"34","NPPF","Westerlies - N. Pacific Polar Front Province",0,280875.721031746
+"35","NPSW","Westerlies - N. Pacific Subtropical Gyre Province (West)",0,147477.4802589
+"36","TASM","Westerlies - Tasman Sea Province",1,28550.878372093
+"37","SPSG","Westerlies - S. Pacific Subtropical Gyre Province",1,16594.8473828576
+"38","NPTG","Trades - N. Pacific Tropical Gyre Province",0,351747.554111365
+"39","PNEC","Trades - N. Pacific Equatorial Countercurrent Province",0,7376.67885844156
+"40","PEQD","Trades - Pacific Equatorial Divergence Province",0,1099.78833561277
+"41","WARM","Trades - W. Pacific Warm Pool Province",0,12562.4168662846
+"42","ARCH","Trades - Archipelagic Deep Basins Province",1,44773.924052139
+"43","ALSK","Coastal - Alaska Downwelling Coastal Province",1,48848.9122344086
+"44","CCAL","Coastal - California Upwelling Coastal Province",1,48481.2197419355
+"45","CAMR","Coastal - Central American Coastal Province",1,18066.2597727273
+"46","CHIL","Coastal - Chile-Peru Current Coastal Province",1,4134.78976975952
+"47","CHIN","Coastal - China Sea Coastal Province",1,2503439.78350515
+"48","SUND","Coastal - Sunda-Arafura Shelves Province",1,110895.20172242
+"49","AUSE","Coastal - East Australian Coastal Province",1,25578.5140860215
+"50","NEWZ","Coastal - New Zealand Coastal Province",1,6123.62634375
+"51","SSTC","Westerlies - S. Subtropical Convergence Province",0,20052.5359640937
+"52","SANT","Westerlies - Subantarctic Province",0,2454.66196145869
+"53","ANTA","Polar - Antarctic Province",0,31.2051315019544
+"54","APLR","Polar - Austral Polar Province",1,6.02400827660087

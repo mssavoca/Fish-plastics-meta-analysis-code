@@ -209,14 +209,14 @@ library(viridis)
 aveplastmap<- lh_map+
               geom_sf(data=full_data, aes(fill=aveplastbin)) + scale_fill_brewer(palette="YlOrRd") + labs(fill = "Average Plastic Ingested") #+ geom_text(aes(label = full_data$ProvCode, x = full_data$X, y = full_data$Y))
 
-aveplastmap
+#aveplastmap
 
 ### done here. Need to add labels
 
 ## number of studies binned
 numstudiesmap <-  lh_map+
               geom_sf(data=joined, aes(fill=aveplastbin)) + scale_fill_brewer(palette="YlGn")
-numstudiesmap
+#numstudiesmap
 
 ######### average plastic pollution map ################
 abund <- read.csv("~/Box Sync/Microplastics/Fish-plastics-meta-analysis-code/Global pollution_map files/vansebillemodel_abundance.csv")
@@ -234,11 +234,12 @@ x_vals[x_vals > 179]  = x_vals[x_vals > 179] - 360 #need to shift the view on th
 
 ###### IF YOU WANT TO GET RID OF THE LINE AT 0/360 or 0/0 (if we are looking at 0-180 scale), run this code instead ###
 # Creating raster list to generate full object 
-raster_obj <- list(z = as.matrix(abund)[, order(x_vals[-1])], #list with attributes as z, and coordinates as x and y
-                   x = x_vals[-1], #got rid of the initial 0 value, because 0 and 360 (or in this case, if we are going between -180 and 180, 0 and 0) overlap. This gets rid of the weird disconnect in the middle of the map
-                  y = as.numeric(poll_lat$V1))
+#raster_obj <- list(z = as.matrix(abund)[, order(x_vals[-1])], #list with attributes as z, and coordinates as x and y
+               #    x = x_vals[-1], #got rid of the initial 0 value, because 0 and 360 (or in this case, if we are going between -180 and 180, 0 and 0) overlap. This gets rid of the weird disconnect in the middle of the map
+              #    y = as.numeric(poll_lat$V1))
 ##############################################################################################################
 
+#to calculate average plastic, will keep the weird line in because we want the plastic values at 0 and 360
 raster_obj <- list(z = as.matrix(abund)[, order(x_vals)], #list with attributes as z, and coordinates as x and y
                    x = x_vals, #got rid of the initial 0 value, because 0 and 360 (or in this case, if we are going between -180 and 180, 0 and 0) overlap. This gets rid of the weird disconnect in the middle of the map
                    y = as.numeric(poll_lat$V1))
@@ -255,8 +256,8 @@ poll_raster <- raster(x = raster_obj$z, # Matrix values of plastic
        # Setting coordinate reference system to be equivalent to longhurst
        crs = crs(lh_prov))
 
-# Plotting Z on the log10 scale (Van Sebille et al (2015, ERL) paper); see that this works
-plot(log10(poll_raster))
+# Plotting Z on the log10 scale (Van Sebille et al (2015, ERL) paper); see that this works; don't want calculations on this scale
+plot(poll_raster)
 
 plot(st_geometry(lh_prov), add = TRUE, fill = NULL)
 
@@ -269,6 +270,15 @@ lapply(extracted_vals, range, na.rm=T) #note that these units are #/km^2
 fullmapdat<- cbind(lh_prov.2, mean_poll_abund)
 fullmapdat
 
+fullmap.df <- fortify(fullmapdat)
+fullmap.df <- st_drop_geometry(fullmap.df) #need to remove geometry in order to get an actual dataframe (zero spatial component)
+head(fullmap.df)
+nrow(fullmap.df)
+
+full_sampled_data <- merge(fullmap.df, newdat, by.x="ProvCode", by.y="prov", sort = TRUE)
+
+write.csv(fullmap.df, "Spatial Information_microplastics.csv")
+write.csv(full_sampled_data, "Spatial Information_onlysampled.csv")
 
 ############# PRETTIER MAP OF POLLUTION (VAN SEBILLE et al. 2015 data) #######################################
 ## caveat - the plotting function of raster retains aspect ratio (only need to change this if we are plotting)
@@ -276,8 +286,8 @@ fullmapdat
 spdf <- as(log10(poll_raster),'SpatialPolygonsDataFrame')
 spdf.real <- as(poll_raster,'SpatialPolygonsDataFrame') # not log-transformed, harder to see
 #--- convert to an sf object ---#
-sf_poll_data <- st_as_sf(spdf)
+sf_poll_data <- st_as_sf(spdf.real)
 #--- take a look ---#
-plot(sf_poll_data) # if you want to get rid of the weird line, scroll up and re-create raster object where indicated
-
+plot(sf_poll_data, border = FALSE, xlim = c(-180, 180), ylim = c(-90, 90), reset = FALSE, logz = TRUE) # if you want to get rid of the weird line, scroll up and re-create raster object where indicated
+plot(st_geometry(lh_prov), add = TRUE, fill = NULL, xlim = c(-180, 180), ylim = c(-90, 90))
 
