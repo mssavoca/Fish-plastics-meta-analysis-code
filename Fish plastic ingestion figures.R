@@ -28,8 +28,8 @@ d = read_csv("Plastics ingestion records fish master_final.csv") %>%
          prime_forage = na_if(prime_forage, "not listed")) %>% 
   separate(binomial, into = c("genus", "species"), sep = " ", remove = FALSE)
 
-d_full <- d %>%
-  filter(includes_microplastic == "Y")
+d_full <- as_tibble( d %>%
+  filter(includes_microplastic == "Y"))
 
 
 # d_old_data = read_csv("Plastics ingestion records fish master_updated.csv") %>% 
@@ -631,8 +631,8 @@ d_test <- d_full %>%
          trophic_level_via_fishbase = numeric(trophic_level_via_fishbase),
          average_depth = numeric(average_depth))
 
-gbmFwP <- gbm.step(data=d_test, 
-                   gbm.x = 2:7, 
+gbmFwP <- gbm.step(data=d_full, 
+                   gbm.x = 7,12,13,15, 
                    gbm.y = 1,   # this is Prop w plastic, 34 is Prop w plastic multiplied by the assessment's sample size
                    #weights = 8,  # weighted by sample size
                    family = "gaussian", 

@@ -15,6 +15,10 @@ library(rotl) #for phylogenetic analyses, get all the species? from Hinchliff et
 library(phytools)
 library(tidyverse)
 library(stringr)
+library(mgcv)
+library(gamm4)
+library(MuMIn)
+library(ggrepel)
 
 SE = function(x){sd(x)/sqrt(sum(!is.na(x)))}
 
@@ -26,8 +30,9 @@ abbr_binom <- function(binom) {
         sep = ".")
 }
 
+d_poll <- as_tibble(read_csv("Spatial Information_microplastics.csv"))
 
-d = read_csv("Plastics ingestion records fish master_final.csv") %>% 
+d = read_csv("Plastics ingestion records fish master_final_2019data.csv") %>% 
   janitor::clean_names() %>% 
   rename(NwP = nw_p,
          N = n) %>% 
@@ -35,7 +40,9 @@ d = read_csv("Plastics ingestion records fish master_final.csv") %>%
          Found = as_factor(case_when(habitat %in% c("demersal", "reef-associated", "benthopelagic", "bathydemersal") ~ "demersal",
                                      habitat %in% c("pelagic-neritic", "pelagic-oceanic", "mesopelagic", "bathypelagic") ~ "pelagic")),
          prime_forage = na_if(prime_forage, "not listed")) %>% 
-  separate(binomial, into = c("genus", "species"), sep = " ", remove = FALSE)
+  rename(ProvCode = "oceanographic_province_from_longhurst_2007") %>% 
+  separate(binomial, into = c("genus", "species"), sep = " ", remove = FALSE) %>% 
+  left_join(dplyr::select(d_poll, c(ProvCode, adjacency, mean_poll_abund)), by = "ProvCode")
 
 d_full <- d %>%
   filter(includes_microplastic == "Y")
@@ -169,7 +176,7 @@ Fig_3 <- ggplot(filter(d_full, Found != "NA"),
   geom_point(alpha = 0.4) + 
   geom_smooth(col = "blue", method = "loess", se = TRUE) +
   geom_hline(yintercept = 0, linetype = "dashed") +
-  facet_wrap(~ Found, scales = "free_y", ncol = 1) +
+  #facet_wrap(~ Found, scales = "free_y", ncol = 1) +
   coord_flip() +
   scale_x_reverse() +
   xlim(1500,0) +
@@ -232,6 +239,8 @@ rarefaction_plot
 
 
 
+
+
 # Figure S1, number of studies over time----
 study_hist <- d %>% 
   group_by(publication_year) %>% 
@@ -256,13 +265,18 @@ gamm4 <- function(...) structure(c(gamm4::gamm4(...), list(call = match.call()))
 
 d_full_wo_gaps <- d %>%
   filter(includes_microplastic == "Y") %>% 
-  drop_na(average_depth, Found, trophic_level_via_fishbase, prime_forage) 
+  drop_na(average_depth, Found, trophic_level_via_fishbase, prime_forage, NwP, N, 
+          adjacency, mean_poll_abund) 
 
 
 
 # model testing both ecological and geographic variables
-gamm4_FwP_eco_geo <- gamm4(cbind(NwP, N-NwP) ~ s(trophic_level_via_fishbase) + s(scale(average_depth)) + Found + prime_forage + oceanographic_province_from_longhurst_2007, 
+gamm4_FwP_eco_geo <- gamm4(cbind(NwP, N-NwP) ~ s(trophic_level_via_fishbase, bs="ts") + 
+                             s(scale(average_depth), bs="ts") + 
+                             s(scale(mean_poll_abund), bs="ts") +
+                             Found + prime_forage + adjacency, # mean poll abund (try spline and no spline) instead of this, and adjacency (no spline)
                    random = ~(1|order) + (1|source), 
+                   REML = TRUE, # new peice from Elliot
                    data = d_full_wo_gaps, family = binomial)
 summary(gamm4_FwP_eco_geo$gam)
 summary(gamm4_FwP_eco_geo$dev.expl)
@@ -271,9 +285,12 @@ plot(gamm4_FwP_eco_geo$gam)
 
 
 # model testing ecological variables
-gamm4_FwP_eco <- gamm4(cbind(NwP, N-NwP) ~ s(trophic_level_via_fishbase) + s(scale(average_depth)) + Found + prime_forage, 
-                           random = ~(1|order) + (1|source), 
-                           data = d_full_wo_gaps, family = binomial)
+gamm4_FwP_eco <- gamm4(cbind(NwP, N-NwP) ~ s(trophic_level_via_fishbase, bs="ts") + 
+                         s(scale(average_depth), bs="ts") + 
+                         Found + prime_forage, 
+                       random = ~(1|order) + (1|source), 
+                       REML = TRUE, # new peice from Elliot
+                       data = d_full_wo_gaps, family = binomial)
 summary(gamm4_FwP_eco$gam)
 summary(gamm4_FwP_eco$dev.expl)
 plot(gamm4_FwP_eco$gam)
@@ -282,17 +299,125 @@ plot(gamm4_FwP_eco$gam)
 
 
 # model testing geographic variable
-gamm4_geo <- gamm4(cbind(NwP, N-NwP) ~ oceanographic_province_from_longhurst_2007, 
+gamm4_geo <- gamm4(cbind(NwP, N-NwP) ~ s(scale(mean_poll_abund), bs="ts") +   # oceanographic_province_from_longhurst_2007,  # swap longhurst region with mean poll abund (try spline and no spline) instead of this, and adjacency (no spline)
                    random = ~(1|order) + (1|source), 
+                   REML = TRUE,
                    data = d_full_wo_gaps, family = binomial)
 summary(gamm4_geo$gam)
 plot(gamm4_geo$gam)
 
 
+gamm4_geo <- gamm4(cbind(NwP, N-NwP) ~ s(scale(mean_poll_abund), bs="ts") + 
+                             adjacency, # mean poll abund (try spline and no spline) instead of this, and adjacency (no spline)
+                           random = ~(1|order) + (1|source), 
+                           REML = TRUE, # new peice from Elliot
+                           data = d_full_wo_gaps, family = binomial)
+summary(gamm4_geo$gam)
+plot(gamm4_geo$gam)
 
-# model testing ecological variables
+
+gamm4_ProvCode <- gamm4(cbind(NwP, N-NwP) ~ ProvCode,  # swap longhurst region with mean poll abund (try spline and no spline) instead of this, and adjacency (no spline)
+                   random = ~(1|order) + (1|source), 
+                   REML = TRUE,
+                   data = d_full_wo_gaps, family = binomial)
+summary(gamm4_ProvCode$gam)
+plot(gamm4_ProvCode$gam)
+
+
+#testing publication year
+gamm4_FwP_pubyear <- gamm4(cbind(NwP, N-NwP) ~ s(publication_year),
+                          random = ~(1|order) + (1|source), 
+                           data = d_full_wo_gaps, family = binomial)
+summary(gamm4_FwP_pubyear$gam)
+summary(gamm4_FwP_pubyear$dev.expl)
+plot(gamm4_FwP_pubyear$gam)
+
+
+# null model
 gamm4_null <- gamm4(cbind(NwP, N-NwP) ~ 1, 
                    random = ~(1|order) + (1|source), 
                    data = d_full_wo_gaps, family = binomial)
 summary(gamm4_null$gam)
 plot(gamm4_null$gam)
+
+
+
+# Trying a GLMM
+
+glmm_FwP_eco_geo <- glmer(cbind(NwP, N-NwP) ~ trophic_level_via_fishbase + 
+                            scale(average_depth) + 
+                            scale(mean_poll_abund) +
+                            Found + prime_forage + adjacency +
+                            (1|order) + (1|source), 
+                          na.action = "na.fail",
+                          data = d_full_wo_gaps, family = binomial)
+summary(glmm_FwP_eco_geo)
+r.squaredGLMM(glmm_FwP_eco_geo)
+
+
+
+glmm_FwP_eco <- glmer(cbind(NwP, N-NwP) ~ trophic_level_via_fishbase + 
+                            scale(average_depth) + 
+                            Found + prime_forage +
+                            (1|order) + (1|source), 
+                          na.action = "na.fail",
+                          data = d_full_wo_gaps, family = binomial)
+summary(glmm_FwP_eco)
+r.squaredGLMM(glmm_FwP_eco)
+
+
+glmm_FwP_geo <- glmer(cbind(NwP, N-NwP) ~ scale(mean_poll_abund) + adjacency +
+                            (1|order) + (1|source), 
+                          na.action = "na.fail",
+                          data = d_full_wo_gaps, family = binomial)
+summary(glmm_FwP_geo)
+r.squaredGLMM(glmm_FwP_geo) # NEED TO DO THIS TO TEST FOR FIT
+
+
+
+# a GLM with no random effects
+glm_FwP_eco_geo <- glm(cbind(NwP, N-NwP) ~ trophic_level_via_fishbase + 
+                         scale(average_depth) + 
+                         scale(mean_poll_abund) +
+                         Found + prime_forage + adjacency,
+                       data = d_full_wo_gaps, family = binomial)
+summary(glm_FwP_eco_geo)
+
+# multi-model selection using AICc
+GLMM_dredge <- dredge(glmm_FwP_eco_geo)
+
+View(GLMM_dredge)
+write_csv(GLMM_dredge, "GLMM model selection table.csv")
+#subset(GLMM_dredge, delta < 4)
+a=model.avg(GLMM_dredge)
+summary(a) #The ‘subset’ (or ‘conditional’) average only averages over the models where the parameter appears. An alternative, the ‘full’ average assumes that a variable is included in every model
+confint(a) #computes confidence interval
+
+
+
+
+
+
+
+
+## Trying a BRT
+d_full_wo_gaps <- d_full %>% 
+  drop_na(order,trophic_level_via_fishbase, habitat, prime_forage, average_depth, oceanographic_province_from_longhurst_2007)
+
+# d_test <- d_full %>%  
+#   slice(1:100) %>% 
+#   select(prop_w_plastic, order,trophic_level_via_fishbase, habitat, prime_forage, average_depth, oceanographic_province_from_longhurst_2007) %>% 
+#   drop_na() %>% 
+#   mutate(prop_w_plastic = numeric(prop_w_plastic),
+#          trophic_level_via_fishbase = numeric(trophic_level_via_fishbase),
+#          average_depth = numeric(average_depth))
+
+gbmFwP <- gbm.step(data=as.data.frame(d_full), 
+                   gbm.x = 7, 13,  
+                   gbm.y = 10,   # this is Prop w plastic, 34 is Prop w plastic multiplied by the assessment's sample size
+                   #weights = 9,  # weighted by sample size
+                   family = "gaussian", 
+                   tree.complexity = 5,
+                   learning.rate = 0.001, bag.fraction = 0.5)
+summary(gbmFwP)
+gbm.plot(gbmFwP)
