@@ -19,6 +19,10 @@ library(mgcv)
 library(gamm4)
 library(MuMIn)
 library(ggrepel)
+library(sjPlot)
+install.packages("tidyr")
+install.packages("tibble")
+library(tibble)
 
 SE = function(x){sd(x)/sqrt(sum(!is.na(x)))}
 
@@ -42,14 +46,17 @@ d = read_csv("Plastics ingestion records fish master_final_2019data.csv") %>%
          prime_forage = na_if(prime_forage, "not listed")) %>% 
   rename(ProvCode = "oceanographic_province_from_longhurst_2007") %>% 
   separate(binomial, into = c("genus", "species"), sep = " ", remove = FALSE) %>% 
-  left_join(dplyr::select(d_poll, c(ProvCode, adjacency, mean_poll_abund)), by = "ProvCode")
+  left_join(dplyr::select(d_poll, c(ProvCode, adjacency, mean_poll_abund)), by = "ProvCode") %>% 
+  mutate(adjacency = as_factor(case_when(adjacency == 1 ~ "Land",
+                                         adjacency == 0 ~ "Oceanic")))
+           
 
 d_full <- d %>%
   filter(includes_microplastic == "Y")
 
 
 # species summary tables
-d_sp_sum <- d_full %>%
+d_sp_sum <- d %>%
   filter(!species %in% c("sp.", "spp.")) %>%
   group_by(binomial, order, commercial) %>%
   summarize(Sp_mean = mean(prop_w_plastic),
@@ -63,7 +70,8 @@ d_sp_sum <- d_full %>%
          commercial = fct_collapse(commercial,
                                    Commercial = c("commercial", "highly commercial"),
                                    Minor = c("minor commercial", "subsistence"),
-                                   None = "none"))%>%
+                                   None = "none")) %>%
+  #filter(commercial == "Commercial") %>% 
   arrange(-Sp_mean)
 
 
@@ -171,12 +179,32 @@ dev.copy2pdf(file="risk_plot.pdf", width=12, height=7)
 
 # Figure 3, plastic ingestion by depth and habitat ----
 
+p <- ggplot(d, 
+            aes(trophic_level_via_fishbase, y= prop_w_plastic, 
+                size= N, weight = N)) + 
+  geom_point(alpha = 0.4) +  # Eventually add in foraging behavior here 
+  geom_smooth(col = "blue", method = "loess") +
+  #xlim(2, 5) +
+  xlab("Trophic level") +
+  ylab("Proportion of individuals with ingested plastic") +
+  annotate("text", x = c(2.75, 4), y= -0.05, 
+           label = c("planktivorous", "piscivorous")) +
+  theme_classic() +
+  theme(axis.text.x = element_text(size=12),
+        axis.text.y = element_text(size=12),
+        axis.title=element_text(size=13, face="bold")) 
+p + guides(size = FALSE)
+
+
+m1 <- lm(trophic_level_via_fishbase~prop_w_plastic, data = d_full)
+summary(m1)
+
 Fig_3 <- ggplot(filter(d_full, Found != "NA"), 
                aes(average_depth, prop_w_plastic, size = N, weight = N)) +
   geom_point(alpha = 0.4) + 
   geom_smooth(col = "blue", method = "loess", se = TRUE) +
   geom_hline(yintercept = 0, linetype = "dashed") +
-  #facet_wrap(~ Found, scales = "free_y", ncol = 1) +
+  facet_wrap(~ Found, scales = "free_y", ncol = 1) +
   coord_flip() +
   scale_x_reverse() +
   xlim(1500,0) +
@@ -258,15 +286,15 @@ study_hist
 # Modeling for fish-plastic ingestion meta-analysis paper
 #########################################################
 
-# trying out some GAMMs in gamm4, feel free to try with mgcv too
-
-# wrapper fucntion  needed to allow MuMIn to compare models
-gamm4 <- function(...) structure(c(gamm4::gamm4(...), list(call = match.call())), class = c("gamm", "list"))  
-
 d_full_wo_gaps <- d %>%
   filter(includes_microplastic == "Y") %>% 
   drop_na(average_depth, Found, trophic_level_via_fishbase, prime_forage, NwP, N, 
           adjacency, mean_poll_abund) 
+
+# trying out some GAMMs in gamm4 ----
+
+# wrapper fucntion  needed to allow MuMIn to compare models
+gamm4 <- function(...) structure(c(gamm4::gamm4(...), list(call = match.call())), class = c("gamm", "list"))  
 
 
 
@@ -342,7 +370,7 @@ plot(gamm4_null$gam)
 
 
 
-# Trying a GLMM
+# Trying a GLMM----
 
 glmm_FwP_eco_geo <- glmer(cbind(NwP, N-NwP) ~ trophic_level_via_fishbase + 
                             scale(average_depth) + 
@@ -353,6 +381,34 @@ glmm_FwP_eco_geo <- glmer(cbind(NwP, N-NwP) ~ trophic_level_via_fishbase +
                           data = d_full_wo_gaps, family = binomial)
 summary(glmm_FwP_eco_geo)
 r.squaredGLMM(glmm_FwP_eco_geo)
+
+
+
+
+a=get_model_data(glmm_FwP_eco_geo, type = "re")[[2]]
+
+# plot total model predictors on response varaible 
+plot_model(glmm_FwP_eco_geo) +
+  ggtitle("Response: Proportion with ingested plastic") +
+  xlab("Predictors") +
+  theme_bw() +
+  geom_hline(yintercept = 1) +
+  ylim(0.001,2)
+
+# plot main effects WOW
+plot_model(glmm_FwP_eco_geo, type = "eff")[[1]]
+
+# plot random effects WOW
+plot_model(glmm_FwP_eco_geo, type = "re")[[2]] +
+  fct_reorder(term, estimate) +
+  ggtitle("Response: Proportion with ingested plastic") +
+  xlab("Order") +
+  ylab("Random intercept") +
+  theme_bw() +
+  geom_hline(yintercept = 1)
+
+
+
 
 
 
@@ -401,7 +457,9 @@ confint(a) #computes confidence interval
 
 
 ## Trying a BRT
-d_full_wo_gaps <- d_full %>% 
+d_full_droprespNA <- d_full %>% 
+  drop_na(prop_w_plastic)
+
   drop_na(order,trophic_level_via_fishbase, habitat, prime_forage, average_depth, oceanographic_province_from_longhurst_2007)
 
 # d_test <- d_full %>%  
@@ -412,8 +470,8 @@ d_full_wo_gaps <- d_full %>%
 #          trophic_level_via_fishbase = numeric(trophic_level_via_fishbase),
 #          average_depth = numeric(average_depth))
 
-gbmFwP <- gbm.step(data=as.data.frame(d_full), 
-                   gbm.x = 7, 13,  
+gbmFwP <- gbm.step(data=as.data.frame(d_full_droprespNA), 
+                   gbm.x = 36, 37,  
                    gbm.y = 10,   # this is Prop w plastic, 34 is Prop w plastic multiplied by the assessment's sample size
                    #weights = 9,  # weighted by sample size
                    family = "gaussian", 
