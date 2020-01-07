@@ -47,7 +47,8 @@ d = read_csv("Plastics ingestion records fish master_final.csv") %>%
   separate(binomial, into = c("genus", "species"), sep = " ", remove = FALSE) %>% 
   left_join(dplyr::select(d_poll, c(ProvCode, adjacency, mean_poll_abund)), by = "ProvCode") %>% 
   mutate(adjacency = as_factor(case_when(adjacency == 1 ~ "Land",
-                                         adjacency == 0 ~ "Oceanic")))
+                                         adjacency == 0 ~ "Oceanic")),
+         source = as_factor(source))
            
 
 d_full <- d %>%
@@ -173,17 +174,18 @@ p %<+% d_sp_sum +
                         name = "Proportion with \ningested plastic") +
   #scale_size(range = c(3, 7)) +
   scale_size_continuous(guide = FALSE, range = c(3, 7)) +
+  scale_shape_discrete(na.translate = F) +
   labs(shape = "Commercial \nstatus") +
   theme(legend.position = c(0.5,0.5),
-        legend.key.size = unit(2.5, "cm"),
-        legend.text = element_text(size = 24),
-        legend.title = element_text(size = 26),
+        legend.key.size = unit(3, "cm"),
+        legend.text = element_text(size = 26),
+        legend.title = element_text(size = 28),
         legend.box = "horizontal") +
   guides(shape = guide_legend(override.aes = list(size = 5)))
 
 
 # save plots
-dev.copy2pdf(file="Prelim_phylo_ggtree2.pdf", width=35, height=35)
+dev.copy2pdf(file="Fish_plastic_phylo.pdf", width=45, height=45)
 ggsave("Prelim_phylo_ggtree2.jpg", width = 35, height = 35, units = "in")
 
 
@@ -204,10 +206,10 @@ risk_plot <- d_sp_sum %>%
                                     "firebrick2", "firebrick3", "firebrick4"), 
                         name = "Proportion with \ningested plastic") +
   scale_size_continuous(breaks = seq(from = 1, to = 3, by = 1), 
-                        labels = c("Poorly studied (n=1)", "Moderately studied (n=2-3)", "Well studied (n=4-6)"),
+                        labels = c("Poorly studied (n=1)", "Moderately studied (n=2-3)", "Well studied (n=4-9)"),
                         range = c(1.5, 5)) +
-  annotate("text", x = c(0.6, 2.8, 0.6, 2.8),
-           y=c(0.9, 0.9, 0.08, 0.08),
+  annotate("text", x = c(0.6, 2.8, 0.4, 3.5),
+           y=c(0.8, 0.8, 0.08, 0.08),
            label = c("high incidence, data poor", "high incidence, data rich",
                      "low incidence, data poor", "low incidence, data rich")) +
   theme_classic(base_size = 16)
@@ -221,13 +223,12 @@ dev.copy2pdf(file="risk_plot.pdf", width=12, height=7)
 p <- ggplot(d_full, 
             aes(trophic_level_via_fishbase, y= prop_w_plastic, 
                 size= N, weight = N)) + 
-  geom_point(aes(color = order), alpha = 0.4) +  # Eventually add in foraging behavior here 
-  geom_smooth(col = "blue", method = "lm") +
+  geom_point(alpha = 0.4) +  # Eventually add in foraging behavior here 
+  geom_smooth(aes(color = source), method = "lm", se = FALSE) +
   #xlim(2, 5) +
   xlab("Trophic level") +
   ylab("Proportion of individuals with ingested plastic") +
-  #xlim(2,5.5) +
-  #facet_wrap(~order) +
+  #facet_wrap(~source) +
   annotate("text", x = c(2.75, 4), y= -0.05, 
            label = c("planktivorous", "piscivorous")) +
   theme_classic() +
@@ -261,6 +262,8 @@ Fig_3 <- ggplot(filter(d_full, Found != "NA"),
 Fig_3 + guides(size = FALSE)
 
 dev.copy2pdf(file="Fig_3.pdf", width=7, height=10)
+
+
 
 # Figure 4, species accumulation curves----
 ## Cumulative unique entries in list of vectors
@@ -307,7 +310,7 @@ rarefaction_plot <- ggplot() +
   theme_classic(base_size = 14)
 rarefaction_plot
 
-
+dev.copy2pdf(file="rarefaction_plot.pdf", width=45, height=45)
 
 
 
