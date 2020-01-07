@@ -1,0 +1,19 @@
+,(Intercept),Found,prime_forage,"s(scale(average_depth), by = Found)",s(trophic_level_via_fishbase),s(scale(average_depth)),V1,df,logLik,AICc,delta,weight
+gamm4_FwP_wo_TL,-1.525134678,+,+,NA,NA,+,"cbind(NwP,N-NwP)~+s(scale(average_depth))+Found+prime_forage",10,-1004.186146,2028.965283,0,0.36555281
+gamm4_FwP_Foundonly,-1.41686283,+,NA,NA,NA,NA,"cbind(NwP,N-NwP)~Found",4,-1011.566187,2031.238474,2.273190721,0.117309459
+gamm4_FwP_wo_depth,-1.383267902,+,+,NA,+,NA,"cbind(NwP,N-NwP)~s(trophic_level_via_fishbase)+Found+",10,-1005.335649,2031.26429,2.29900705,0.115804941
+gamm4_FwP_wo_depth_w_interaction,-1.383267902,+,+,NA,+,NA,"cbind(NwP,N-NwP)~s(trophic_level_via_fishbase)+Found+",10,-1005.335649,2031.26429,2.29900705,0.115804941
+gamm4_FwP_w_conditional,-1.414675126,+,+,+,+,NA,"cbind(NwP,N-NwP)~s(trophic_level_via_fishbase)+s(scale(average_depth),",14,-1001.616604,2032.377622,3.412339118,0.066369738
+gamm4_FwP_wo_TL_w_interaction,-1.343885466,NA,+,+,NA,NA,"cbind(NwP,N-NwP)~+s(scale(average_depth),Found)+",11,-1004.949985,2032.613483,3.648199661,0.058986637
+gamm4_FwP_wo_Forage,-1.396463709,+,NA,NA,+,+,"cbind(NwP,N-NwP)~s(trophic_level_via_fishbase)+s(scale(average_depth))+",8,-1008.345033,2033.076125,4.110842067,0.046804985
+gamm4_FwP,-1.427933612,+,+,NA,+,+,"cbind(NwP,N-NwP)~s(trophic_level_via_fishbase)+s(scale(average_depth))+",12,-1004.165304,2033.176136,4.21085243,0.044522049
+gamm4_FwP_wo_Forage_w_interaction,-1.411860961,+,NA,+,+,NA,"cbind(NwP,N-NwP)~s(trophic_level_via_fishbase)+s(scale(average_depth),",10,-1006.440614,2033.47422,4.508936409,0.038357211
+gamm4_FwP_Forageonly,-1.391314396,NA,+,NA,NA,NA,"cbind(NwP,N-NwP)~prime_forage",7,-1010.239468,2034.778401,5.813118221,0.019982395
+gamm4_FwP_wo_Found,-1.36940008,NA,+,NA,+,+,"cbind(NwP,N-NwP)~s(trophic_level_via_fishbase)+s(scale(average_depth))+",11,-1007.242466,2037.198446,8.233162566,0.005958564
+gamm4_FwP_depth_only,-1.297368629,NA,NA,NA,NA,+,"cbind(NwP,N-NwP)~+s(scale(average_depth))",5,-1014.549069,2039.257712,10.29242916,0.002128029
+gamm4_FwP_TLonly,-1.302031946,NA,NA,NA,+,NA,"cbind(NwP,N-NwP)~s(trophic_level_via_fishbase)",5,-1014.896365,2039.952303,10.98702034,0.001503658
+gamm4_null,-1.308268229,NA,NA,NA,NA,NA,"cbind(NwP,N-NwP)~1",3,-1017.441593,2040.946678,11.98139459,0.000914583
+,,,,,,,,,,,,
+,,,,,,,,,,,,
+,,,,,,,,,,,,
+,,,""":",,,,,,,,,

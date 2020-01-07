@@ -1,0 +1,7 @@
+common_name,binomial,FO_plastic,mean_num_plast,sample_size,num_studies,commercial_status,AC_status,rec_status,Vulnerability.score,IUCN.status
+Bluefin tuna,Thunnus thynnus,0.3055555555555556,NaN,36,1,commercial,Y,Y,82,EN
+Blue shark,Prionace glauca,0.2517985611510791,0.769784173,139,1,minor commercial,N,Y,77,NT
+Yellowfin tuna,Thunnus albacares,0.13194444444444445,0.388235294,144,3,highly commercial,experimental,Y,51,NT
+Albacore tuna,Thunnus alalunga,0.12121212121212122,0,33,2,highly commercial,N,Y,58,NT
+Skipjack tuna,Katsuwonus pelamis,0.09230769230769231,0.11538461533333333,65,4,highly commercial,N,Y,38,LC
+Bigeye Tuna,Thunnus obesus,0.08571428571428572,NaN,35,1,highly commercial,N,Y,56,VU

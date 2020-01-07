@@ -1,0 +1,24 @@
+common_name,binomial,family,species,species_avg,mean_num_plast,sample_size,num_studies,commercial_status,AC_status,rec_status
+Common sole,Solea solea,Soleidae,solea,0.8115264797507789,7.174875389694703,642,3,highly commercial,Y,Y
+Japanese anchovy,Engraulis japonicus,Engraulidae,japonicus,0.765625,1.76,64,1,commercial,N,Y
+European flounder,Platichthys flesus,Pleuronectidae,flesus,0.7424242424242424,NA,66,1,commercial,experimental,Y
+Common two-banded seabream,Diplodus vulgaris,Sparidae,vulgaris,0.725,3.14,40,1,commercial,N,Y
+Amberstripe scad,Decapterus muroadsi,Carangidae,muroadsi,0.7111111111111111,1.7555555555555555,45,2,commercial,N,N
+Bogue,Boops boops,Sparidae,boops,0.5365853658536586,1.9896205962059619,369,2,highly commercial,N,Y
+Squaretail mullet,Ellochelon vaigiensis,Mugilidae,vaigiensis,0.48484848484848486,2.060606061,33,1,commercial,Y,N
+European plaice,Pleuronectes platessa,Pleuronectidae,platessa,0.47953216374269003,0.7883040934385964,171,2,highly commercial,Y,Y
+Mediterranean horse mackerel,Trachurus mediterraneus,Carangidae,mediterraneus,0.47,1.0388000000000002,100,2,commercial,N,Y
+Atlantic croaker,Micropogonias undulatus,Sciaenidae,undulatus,0.4516971279373368,0.87,383,1,commercial,experimental,Y
+Sand trout,Cynoscion arenarius,Sciaenidae,arenarius,0.4316546762589928,0.79,139,1,commercial,N,N
+Annular seabream,Diplodus annularis,Sparidae,annularis,0.4166666666666667,0.6,48,1,commercial,N,Y
+Gilthead seabream,Sparus aurata,Sparidae,aurata,0.38461538461538464,1.4784615384615383,130,2,commercial,Y,Y
+Golden gray mullet,Liza aurata,Mugilidae,aurata,0.358974358974359,1.08,39,1,commercial,Y,N
+Meagre,Argyrosomus regius,Sciaenidae,regius,0.35714285714285715,0.5541071428571429,56,2,commercial,N,Y
+Southern kingcroaker,Menticirrhus americanus,Sciaenidae,americanus,0.3509933774834437,NA,151,2,commercial,N,Y
+Pacific saury,Cololabis saira,Scomberesocidae,saira,0.34615384615384615,3.2,52,1,highly commercial,N,N
+Bluefin tuna,Thunnus thynnus,Scombridae,thynnus,0.3055555555555556,NA,36,1,commercial,Y,Y
+Chub mackerel,Scomber japonicus,Scombridae,japonicus,0.2909090909090909,0.9815454543727273,110,5,highly commercial,Y,Y
+Shortfin Scad,Decapterus macrosoma,Carangidae,macrosoma,0.2857142857142857,1.2023809523809523,42,2,commercial,N,N
+Snoek,Thyrsites atun,Gempylidae,atun,0.26666666666666666,0.5666666665333333,30,2,highly commercial,N,Y
+Red mullet,Mullus barbatus,Mullidae,barbatus,0.26286764705882354,0.40327077221139707,544,5,commercial,N,Y
+Flathead gray mullet,Mugil cephalus,Mugilidae,cephalus,0.25301204819277107,0.8746987952530121,83,3,highly commercial,Y,Y

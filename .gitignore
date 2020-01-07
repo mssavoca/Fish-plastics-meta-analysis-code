@@ -3,3 +3,11 @@
 .RData
 .Ruserdata
 .DS_Store
+*.pdf
+*.jpeg
+*.jpg
+*.png
+*.eps
+*.zip
+*.ai
+*.tif
