@@ -20,9 +20,8 @@ library(gamm4)
 library(MuMIn)
 library(ggrepel)
 library(sjPlot)
-install.packages("tidyr")
-install.packages("tibble")
 library(tibble)
+library(tidyr)
 
 SE = function(x){sd(x)/sqrt(sum(!is.na(x)))}
 
@@ -36,7 +35,7 @@ abbr_binom <- function(binom) {
 
 d_poll <- as_tibble(read_csv("Spatial Information_microplastics.csv"))
 
-d = read_csv("Plastics ingestion records fish master_final_2019data.csv") %>% 
+d = read_csv("Plastics ingestion records fish master_final.csv") %>% 
   janitor::clean_names() %>% 
   rename(NwP = nw_p,
          N = n) %>% 
@@ -59,13 +58,14 @@ d_full <- d %>%
 d_sp_sum <- d %>%
   filter(!species %in% c("sp.", "spp.")) %>%
   group_by(binomial, order, commercial) %>%
-  summarize(Sp_mean = mean(prop_w_plastic),
+  drop_na(binomial) %>% 
+  summarize(Sp_mean = mean(prop_w_plastic, na.rm = TRUE),
             Sample_size = sum(N),
             num_studies = n_distinct(source)) %>% 
   ungroup %>% 
   mutate(commercial = factor(commercial),
          studies_cat = as.double(cut(num_studies, 
-                                     c(0, 1, 3, 6),
+                                     c(0, 1, 3, Inf),
                                      c(1,2,3))),
          commercial = fct_collapse(commercial,
                                    Commercial = c("commercial", "highly commercial"),
@@ -74,8 +74,47 @@ d_sp_sum <- d %>%
   #filter(commercial == "Commercial") %>% 
   arrange(-Sp_mean)
 
+d_family_disc <- d %>% 
+  filter(family %in%  c("Carangidae", "Mugilidae", "Pleuronectidae", "Soleidae", "Myctophidae")) %>% 
+  group_by(family) %>% 
+  summarise(FO_plastic = sum(NwP)/sum(N),
+            mean_num_plast = mean(mean_num_particles_per_indv, na.rm = TRUE),
+            sample_size = sum(N),
+            num_studies = n_distinct(source)) %>% 
+  arrange(desc(FO_plastic))
+write_csv(d_family_disc, "Fish families of concern.csv")
 
 
+# fish of concern for humans
+concern_fish <- d %>% 
+  group_by(common_name, binomial, family, species) %>% 
+  filter(commercial %in% c("commercial", "highly commercial")) %>%
+  summarize(species_avg = sum(NwP)/sum(N),
+            mean_num_plast = weighted.mean(mean_num_particles_per_indv, N),
+            sample_size = sum(N),
+            num_studies = n_distinct(source),
+            commercial_status = first(commercial),
+            AC_status = first(aquaculture), 
+            rec_status = first(recreational)) %>% 
+  ungroup %>% 
+  #  filter(species_avg > 0.25 & sample_size > 25) %>% 
+  arrange(-species_avg)
+write_csv(concern_fish, "Concerning fish for humans.csv")
+
+# geographic summary of data
+Fish_geo_summ <- d_full %>% 
+  filter(ProvCode %in% c("CHIN", "KURO", "SUND", "INDE")) %>%
+  #filter(ProvCode %in% c("NAST E", "NECS", "MEDI")) %>% 
+  #filter(ProvCode == "BPRL") %>% 
+  group_by(ProvCode) %>% 
+  summarize(num_studies = n_distinct(source),
+            num_sp = n_distinct(binomial),
+            num_w_plast = sum(NwP, na.rm = TRUE),
+            num_ind_studied = sum(N, na.rm = TRUE),
+            prop_by_region = sum(NwP, na.rm = TRUE)/sum(N, na.rm = TRUE),
+            wgt_mean_plast_num = weighted.mean(mean_num_particles_per_indv, N),
+            se_plast_num = SE(mean_num_particles_per_indv))
+write_csv(Fish_geo_summ, "Fish_plastic geographic summary.csv")
 
 # Phylogenetic tree figure for paper, Figure 1 ----
 
@@ -179,14 +218,16 @@ dev.copy2pdf(file="risk_plot.pdf", width=12, height=7)
 
 # Figure 3, plastic ingestion by depth and habitat ----
 
-p <- ggplot(d, 
+p <- ggplot(d_full, 
             aes(trophic_level_via_fishbase, y= prop_w_plastic, 
                 size= N, weight = N)) + 
-  geom_point(alpha = 0.4) +  # Eventually add in foraging behavior here 
-  geom_smooth(col = "blue", method = "loess") +
+  geom_point(aes(color = order), alpha = 0.4) +  # Eventually add in foraging behavior here 
+  geom_smooth(col = "blue", method = "lm") +
   #xlim(2, 5) +
   xlab("Trophic level") +
   ylab("Proportion of individuals with ingested plastic") +
+  #xlim(2,5.5) +
+  #facet_wrap(~order) +
   annotate("text", x = c(2.75, 4), y= -0.05, 
            label = c("planktivorous", "piscivorous")) +
   theme_classic() +
@@ -194,6 +235,8 @@ p <- ggplot(d,
         axis.text.y = element_text(size=12),
         axis.title=element_text(size=13, face="bold")) 
 p + guides(size = FALSE)
+
+# DO A GLM 
 
 
 m1 <- lm(trophic_level_via_fishbase~prop_w_plastic, data = d_full)
@@ -288,101 +331,25 @@ study_hist
 
 d_full_wo_gaps <- d %>%
   filter(includes_microplastic == "Y") %>% 
-  drop_na(average_depth, Found, trophic_level_via_fishbase, prime_forage, NwP, N, 
-          adjacency, mean_poll_abund) 
-
-# trying out some GAMMs in gamm4 ----
-
-# wrapper fucntion  needed to allow MuMIn to compare models
-gamm4 <- function(...) structure(c(gamm4::gamm4(...), list(call = match.call())), class = c("gamm", "list"))  
-
-
-
-# model testing both ecological and geographic variables
-gamm4_FwP_eco_geo <- gamm4(cbind(NwP, N-NwP) ~ s(trophic_level_via_fishbase, bs="ts") + 
-                             s(scale(average_depth), bs="ts") + 
-                             s(scale(mean_poll_abund), bs="ts") +
-                             Found + prime_forage + adjacency, # mean poll abund (try spline and no spline) instead of this, and adjacency (no spline)
-                   random = ~(1|order) + (1|source), 
-                   REML = TRUE, # new peice from Elliot
-                   data = d_full_wo_gaps, family = binomial)
-summary(gamm4_FwP_eco_geo$gam)
-summary(gamm4_FwP_eco_geo$dev.expl)
-plot(gamm4_FwP_eco_geo$gam)
-
-
-
-# model testing ecological variables
-gamm4_FwP_eco <- gamm4(cbind(NwP, N-NwP) ~ s(trophic_level_via_fishbase, bs="ts") + 
-                         s(scale(average_depth), bs="ts") + 
-                         Found + prime_forage, 
-                       random = ~(1|order) + (1|source), 
-                       REML = TRUE, # new peice from Elliot
-                       data = d_full_wo_gaps, family = binomial)
-summary(gamm4_FwP_eco$gam)
-summary(gamm4_FwP_eco$dev.expl)
-plot(gamm4_FwP_eco$gam)
-
-
-
-
-# model testing geographic variable
-gamm4_geo <- gamm4(cbind(NwP, N-NwP) ~ s(scale(mean_poll_abund), bs="ts") +   # oceanographic_province_from_longhurst_2007,  # swap longhurst region with mean poll abund (try spline and no spline) instead of this, and adjacency (no spline)
-                   random = ~(1|order) + (1|source), 
-                   REML = TRUE,
-                   data = d_full_wo_gaps, family = binomial)
-summary(gamm4_geo$gam)
-plot(gamm4_geo$gam)
-
-
-gamm4_geo <- gamm4(cbind(NwP, N-NwP) ~ s(scale(mean_poll_abund), bs="ts") + 
-                             adjacency, # mean poll abund (try spline and no spline) instead of this, and adjacency (no spline)
-                           random = ~(1|order) + (1|source), 
-                           REML = TRUE, # new peice from Elliot
-                           data = d_full_wo_gaps, family = binomial)
-summary(gamm4_geo$gam)
-plot(gamm4_geo$gam)
-
-
-gamm4_ProvCode <- gamm4(cbind(NwP, N-NwP) ~ ProvCode,  # swap longhurst region with mean poll abund (try spline and no spline) instead of this, and adjacency (no spline)
-                   random = ~(1|order) + (1|source), 
-                   REML = TRUE,
-                   data = d_full_wo_gaps, family = binomial)
-summary(gamm4_ProvCode$gam)
-plot(gamm4_ProvCode$gam)
-
-
-#testing publication year
-gamm4_FwP_pubyear <- gamm4(cbind(NwP, N-NwP) ~ s(publication_year),
-                          random = ~(1|order) + (1|source), 
-                           data = d_full_wo_gaps, family = binomial)
-summary(gamm4_FwP_pubyear$gam)
-summary(gamm4_FwP_pubyear$dev.expl)
-plot(gamm4_FwP_pubyear$gam)
-
-
-# null model
-gamm4_null <- gamm4(cbind(NwP, N-NwP) ~ 1, 
-                   random = ~(1|order) + (1|source), 
-                   data = d_full_wo_gaps, family = binomial)
-summary(gamm4_null$gam)
-plot(gamm4_null$gam)
-
-
+  drop_na(average_depth, Found, trophic_level_via_fishbase, NwP, N, 
+          adjacency, prime_forage, mean_poll_abund, ProvCode) 
 
 # Trying a GLMM----
 
-glmm_FwP_eco_geo <- glmer(cbind(NwP, N-NwP) ~ trophic_level_via_fishbase + 
+glmm_FwP_eco_geo_TL <- glmer(cbind(NwP, N-NwP) ~ scale(trophic_level_via_fishbase) +
                             scale(average_depth) + 
                             scale(mean_poll_abund) +
-                            Found + prime_forage + adjacency +
+                            Found + adjacency +
                             (1|order) + (1|source), 
                           na.action = "na.fail",
                           data = d_full_wo_gaps, family = binomial)
-summary(glmm_FwP_eco_geo)
-r.squaredGLMM(glmm_FwP_eco_geo)
+summary(glmm_FwP_eco_geo_TL)
+r.squaredGLMM(glmm_FwP_eco_geo_TL)
 
-
+# DO PLOT WITH DIFFERENT LINES FOR DIFFERENT ORDER, TL and Plastic ingestion by ORDER
+# DO TROPHIC LEVEL AND FORAGING MODE IN SEPARATE MODELS SINCE THEY"RE CONFLATIED
+# LOOK AT INTERCEPT ONLY GLMMs, DO RANDOM EFFECTS MAKE SENSE?
+# PLOT PRIMARY FORAGING MODE AS SEPARATE MODEL WITH IT AS MAIN OR RANDOM EFFECT 
 
 
 a=get_model_data(glmm_FwP_eco_geo, type = "re")[[2]]
@@ -400,7 +367,7 @@ plot_model(glmm_FwP_eco_geo, type = "eff")[[1]]
 
 # plot random effects WOW
 plot_model(glmm_FwP_eco_geo, type = "re")[[2]] +
-  fct_reorder(term, estimate) +
+  #fct_reorder(term, estimate) +
   ggtitle("Response: Proportion with ingested plastic") +
   xlab("Order") +
   ylab("Random intercept") +
