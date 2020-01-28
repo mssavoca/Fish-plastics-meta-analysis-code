@@ -61,7 +61,7 @@ d_full <- d %>%
 # summary tables----
 
 # species summary table
-d_sp_sum <- d %>%
+d_sp_sum <- d_full %>%
   filter(!species %in% c("sp.", "spp.","spp")) %>%
   group_by(binomial, family, order, commercial, iucn_status) %>%
   drop_na(binomial, family) %>% 
@@ -77,7 +77,7 @@ d_sp_sum <- d %>%
                                    Commercial = c("commercial", "highly commercial"),
                                    Minor = c("minor commercial", "subsistence"),
                                    None = "none")) %>%
-  #filter(commercial == "Commercial") %>% 
+  filter(Sample_size < 25, Sp_mean <0.25) %>% 
   arrange(-Sp_mean)
 
 
@@ -110,16 +110,17 @@ d_vulnerability <- d_full %>%
   mutate(Vulnerability.category = cut(vulnerability_score_via_fishbase_from_cheug_et_al_2005,
                                       breaks=c(-Inf, 20, 40, 60, 80, Inf), 
                                       labels=c("low","low-moderate", "moderate-high", "high-very high", "very high"))) %>% 
-  group_by(common_name, binomial, vulnerability_score_via_fishbase_from_cheug_et_al_2005, iucn_status) %>%  
+  group_by(binomial, common_name, vulnerability_score_via_fishbase_from_cheug_et_al_2005, iucn_status) %>%  
   summarize(FO_plastic = sum(NwP)/sum(N),
             Sample_size = sum(N),
             #    num_sp = n_distinct(binomial), 
             num_studies = n_distinct(source)) %>% 
   ungroup %>% 
   filter(
+    vulnerability_score_via_fishbase_from_cheug_et_al_2005 >50, 
     #Vulnerability.category %in% c("moderate-high", "high-very high", "very high") & 
            #iucn_status %in% c("NT","VU", "EN", "CR") & 
-           FO_plastic > 0.25, Sample_size > 25) %>% 
+           FO_plastic > 0.25, Sample_size > 25, ) %>% 
   arrange(-FO_plastic)
 
 write_csv(d_vulnerability, "Vulnerability table.csv")
@@ -160,131 +161,6 @@ Fish_geo_summ <- d_full %>%
 write_csv(Fish_geo_summ, "Fish_plastic geographic summary.csv")
 
 
-
-
-# Phylogenetic tree figure for paper, Figure 1 ----
-
-# building the basic tree 
-
-breaks <- c(seq(1,nrow(d_sp_sum),50),nrow(d_sp_sum)+1)  # why are we doing this?
-
-for (i in 1:(length(breaks)-1)){
-  taxa <- as.character(d_sp_sum$binomial[breaks[i]:(breaks[i+1]-1)])
-  taxa <- taxa[taxa != "" & !is.na(taxa)]
-  
-  resolved_namest <- tnrs_match_names(taxa)                          # I think this is where all the extra species fall out
-  resolved_namest <- resolved_namest[!is.na(resolved_namest$unique_name),]
-  if (i==1){
-    resolved_namess <- resolved_namest
-  } else {
-    resolved_namess <- rbind(resolved_namess, resolved_namest)
-  }
-}
-resolved_names <- resolved_namess
-resolved_names <- resolved_names[resolved_names$flags!="INCERTAE_SEDIS_INHERITED",]
-
-#plots species
-my_tree <- tol_induced_subtree(ott_ids = resolved_names$ott_id, label_format = "name")
-
-my_tree$tip.label<-gsub("_"," ",my_tree$tip.label) # removes underscore between genus and species names
-my_tree$tip.label<-str_extract(my_tree$tip.label, "[A-Z][a-z]+ [a-z]+")
-
-my_tree <- compute.brlen(my_tree, method = "Grafen", power = 1/2) #add branch lengths to my tree using the Grafen (1989) method
-my_tree <- ladderize(my_tree, right = TRUE)
-
-#View(my_tree)
-
-#my_tree2 = phylo4d(my_tree, d_sp_sum)
-
-
-# first plot try, fan layout
-p <- ggtree(my_tree, layout="fan", open.angle=0) + 
-  #geom_text2(aes(label=label), hjust=-.2, size=4) +
-  ggplot2::xlim(-0.6, 1.3) 
-p
-
-my_tree$tip.label <- as.factor(my_tree$tip.label)
-
-# SUPPLEMENTAL PHYLOGENY FIGURE, ALL SPECIES ----
-p %<+% d_sp_sum + 
-  aes(color = Sp_mean) +
-  geom_tiplab2(aes(label = paste0("italic('", label, "')"),
-                   color=Sp_mean, angle = angle), parse = TRUE,
-               size = 6, align = FALSE, hjust = -0.05) +
-  geom_tippoint(aes(color = Sp_mean, shape = commercial, size = studies_cat)) +
-  scale_color_gradientn(colours = c("steelblue", "darkgoldenrod1", 
-                                    "darkorange", "orangered2", "red3", "red4"), 
-                        name = "Proportion with \ningested plastic") +
-  #scale_size(range = c(3, 7)) +
-  scale_size_continuous(guide = FALSE, range = c(3, 7)) +
-  scale_shape_discrete(na.translate = F) +
-  labs(shape = "Commercial \nstatus") +
-  theme(legend.position = c(0.5,0.5),
-        legend.key.size = unit(3.5, "cm"),
-        legend.text = element_text(size = 28),
-        legend.title = element_text(size = 30),
-        legend.box = "horizontal") +
-  guides(shape = guide_legend(override.aes = list(size = 5)))
-
-
-# save plots
-dev.copy2pdf(file="Fish_plastic_phylo.pdf", width=50, height=50)
-ggsave("Prelim_phylo_ggtree2.tiff", width = 42, height = 42, units = "in")
-ggsave("Prelim_phylo_ggtree2.eps", width = 45, height = 45, units = "in")
-ggsave("Prelim_phylo_ggtree2.jpg", width = 45, height = 45, units = "in")
-
- # risk/interest plot, either figure 1B or supplementary ----
-risk_plot <- d_sp_sum %>% 
-  drop_na(commercial) %>% 
-  ggplot(aes(log10(Sample_size), Sp_mean)) +
-  geom_point(aes(color = Sp_mean, shape = commercial, size = studies_cat), 
-             alpha = 0.8) +
-  geom_hline(yintercept = 0.25, linetype="dashed", color = "grey50") +
-  geom_vline(xintercept = log10(25), linetype="dashed", color = "grey50") +
-  xlab("Log[Sample Size]") +
-  ylab("Species-specific plastic ingestion incidence (FO)") +
-  labs(shape = "Commercial status", shape = "Commercial Status", size =  "Number of studies") +
-  scale_color_gradientn(colours = c("steelblue", "darkgoldenrod1", 
-                                    "darkorange", "orangered2", "red3", "red4"), 
-                        name = "Proportion with \ningested plastic") +
-  scale_size_continuous(breaks = seq(from = 1, to = 3, by = 1), 
-                        labels = c("Poorly studied (n=1)", "Moderately studied (n=2-3)", "Well studied (n>3)"),
-                        range = c(1.5, 5)) +
-  annotate("text", x = c(0.4, 2.8, 0.4, 2.8),
-           y=c(0.8, 0.8, 0.08, 0.08),
-           label = c("high incidence, data poor", "high incidence, data rich",
-                     "low incidence, data poor", "low incidence, data rich")) +
-  theme_classic(base_size = 16)
-risk_plot
-
-dev.copy2pdf(file="risk_plot.pdf", width=12, height=7)
-
-
-# Figure 3, plastic ingestion by depth and habitat ----
-
-p <- drop_na(d_full, trophic_level_via_fishbase, prop_w_plastic, N)
-
-p <-   ggplot(filter(d_full, order == "Perciformes"),
-    aes(trophic_level_via_fishbase, 
-             y = prop_w_plastic, 
-             size = N, 
-             weight = N)) + 
-  geom_point(alpha = 0.4) +  # Eventually add in foraging behavior here 
-  geom_smooth(method = "lm", se = FALSE) +
-  #geom_smooth(aes(color = source), method = "lm", se = FALSE) +
-  #xlim(2, 5) +
-  xlab("Trophic level") +
-  ylab("Proportion of individuals with ingested plastic") +
-  #facet_wrap(~order) +
-  # annotate("text", x = c(2.75, 4), y= -0.05,    # Comment out if faceting
-  #          label = c("planktivorous", "piscivorous")) +
-  theme_classic() +
-  theme(axis.text.x = element_text(size=12),
-        axis.text.y = element_text(size=12),
-        axis.title=element_text(size=13, face="bold")) 
-p + guides(size = FALSE)
-
-
 # Figure 1, Family phylogeny----
 
 d_family <- d_full %>% 
@@ -292,6 +168,7 @@ d_family <- d_full %>%
   summarise(FO_plastic = sum(NwP, na.rm = TRUE)/sum(N, na.rm = TRUE),
             mean_num_plast = mean(mean_num_particles_per_indv, na.rm = TRUE),
             sample_size = sum(N, na.rm = TRUE),
+            num_sp = n_distinct(binomial),
             num_studies = n_distinct(source),
             prop_commercial = sum(commercial %in% c("commercial", "highly commercial"))/n()) %>% 
   drop_na(family) %>% 
@@ -301,6 +178,7 @@ d_family <- d_full %>%
          commercial_cat = cut(prop_commercial,
                               breaks=c(-Inf, 0.01, 0.25, Inf), 
                               labels=c("None", "Minor", "Commercial"))) %>% 
+  filter(FO_plastic >0.25, sample_size >25, num_sp > 2, commercial_cat == "Commercial") %>% 
   arrange(desc(FO_plastic))
 
 
@@ -330,13 +208,13 @@ d_family$ott_id <- taxon_search$ott_id
 
 #plots FAMILIES
 my_tree <- tol_induced_subtree(ott_ids = c(85219, 118776, 816156, 19305, 893503, 960231, 563241, 253371, 486695, 42415, 738324, 561376, 239745, 679814, 749780, 34184, 875698, 
-                                          978560, 1003121, 384676, 137651, 739933, 191025, 646019, 804461, 722754, 1089734, 637234, 648754, 37461, 888446, 563518, 856584,
-                                          186486, 563230, 479853, 734459, 437596, 1089730, 441564, 292707, 823203, 427507, 42408, 655424, 44805, 577720, 19301, 441571, 232621, 
-                                          279762, 1089742, 813991, 1032209, 129124, 804451, 308750, 587923, 583638, 340592, 400235, 749770, 1074732, 701559, 563513, 710014, 
-                                          99942, 450143, 609233, 160291, 712841, 739939, 883406, 1089740, 460871, 734202, 818997, 214115, 132684, 72393, 407171, 563254, 74014, 
-                                          280947, 99937, 769569, 214115, 175436, 308741, 114163, 363181, 615333, 258647, 1052881, 13838, 555245, 1093612, 930712, 778687, 579429, 
-                                          562630, 574822, 280953, 339090, 540474, 859881, 137656, 62639, 811925, 479864, 644001, 95055, 401063, 765787, 715629, 724438, 659851, 
-                                          614519, 769567, 892951, 892958, 237354, 250743, 65336, 553102, 1026498, 36225),
+                                           978560, 1003121, 384676, 137651, 739933, 191025, 646019, 804461, 722754, 1089734, 637234, 648754, 37461, 888446, 563518, 856584,
+                                           186486, 563230, 479853, 734459, 437596, 1089730, 441564, 292707, 823203, 427507, 42408, 655424, 44805, 577720, 19301, 441571, 232621, 
+                                           279762, 1089742, 813991, 1032209, 129124, 804451, 308750, 587923, 583638, 340592, 400235, 749770, 1074732, 701559, 563513, 710014, 
+                                           99942, 450143, 609233, 160291, 712841, 739939, 883406, 1089740, 460871, 734202, 818997, 214115, 132684, 72393, 407171, 563254, 74014, 
+                                           280947, 99937, 769569, 214115, 175436, 308741, 114163, 363181, 615333, 258647, 1052881, 13838, 555245, 1093612, 930712, 778687, 579429, 
+                                           562630, 574822, 280953, 339090, 540474, 859881, 137656, 62639, 811925, 479864, 644001, 95055, 401063, 765787, 715629, 724438, 659851, 
+                                           614519, 769567, 892951, 892958, 237354, 250743, 65336, 553102, 1026498, 36225),
                                label_format = "name")
 
 
@@ -358,7 +236,7 @@ my_tree$tip.label[my_tree$tip.label == "mrcaott73302ott93287"] <- "Atherinopsida
 my_tree$tip.label[my_tree$tip.label == "Alepocephaliformes"] <- "Alepocephalidae"
 my_tree$tip.label[my_tree$tip.label == "Ephippiformes"] <- "Ephippidae"
 
-a = as.tibble(my_tree)
+a = as_tibble(my_tree)
 which(my_tree$tip.label=="Lutjanidae")
 
 my_tree <- compute.brlen(my_tree, method = "Grafen", power = 1/2) #add branch lengths to my tree using the Grafen (1989) method
@@ -514,16 +392,16 @@ taxa
 my_tree <- add.taxa.phylo(my_tree, taxa)$tree
 my_tree <- as.phylo(my_tree) 
 
-a = as.tibble(my_tree)
+a = as_tibble(my_tree)
 
 #THINGS TO ADD IN IN SECOND PHYLO CALL
 #Congridae # sister to Muraenesocidae # ADD THIS IN AT THE END IN A SEPARATE ADD.TAXA CALL
 # Labridae # sister to Scaridae # ADD THIS IN AT THE END IN A SEPARATE ADD.TAXA CALL
 
 final_taxa <- matrix(c("Muraenesocidae", "Scaridae", "mrcaott33200ott33222",  # This row exists on phylogeny
-                 "Congridae", "Labridae", "Merlucciidae",   # These are tips to add on phylogeny
-                 NA,NA,NA), 
-               3,3)
+                       "Congridae", "Labridae", "Merlucciidae",   # These are tips to add on phylogeny
+                       NA,NA,NA), 
+                     3,3)
 final_taxa
 
 my_tree <- add.taxa.phylo(my_tree, final_taxa)$tree
@@ -549,7 +427,7 @@ p %<+% d_family +
                    color=FO_plastic), parse = TRUE,
                size = 6, align = FALSE, offset = 0.05) +
   geom_tippoint(aes(color = FO_plastic, shape = commercial_cat, size = studies_cat)) +
-  scale_color_gradientn(colours = c("steelblue", "darkgoldenrod1", 
+  scale_color_gradientn(colours = c("steelblue4", "darkgoldenrod1", 
                                     "darkorange", "orangered2", "red3", "red4"), 
                         name = "Proportion with \ningested plastic") +
   #scale_size(range = c(3, 7)) +
@@ -568,6 +446,61 @@ ggsave("Fish_family_plastic_phylo_final.jpg", width = 20, height = 20, units = "
 
 
 
+
+
+
+ # Figure 3 risk plot  ----
+risk_plot <- d_sp_sum %>% 
+  drop_na(commercial) %>% 
+  ggplot(aes(log10(Sample_size), Sp_mean)) +
+  geom_point(aes(color = Sp_mean, shape = commercial, size = studies_cat), 
+             alpha = 0.8) +
+  geom_hline(yintercept = 0.25, linetype="dashed", color = "grey50") +
+  geom_vline(xintercept = log10(25), linetype="dashed", color = "grey50") +
+  xlab("Log[Sample Size]") +
+  ylab("Species-specific plastic ingestion incidence (FO)") +
+  labs(shape = "Commercial status", shape = "Commercial Status", size =  "Number of studies") +
+  scale_color_gradientn(colours = c("steelblue4",
+                                    "darkgoldenrod1",
+                                    "darkorange", "orangered1",
+                                    "firebrick1", "red3", "red4"), 
+                        name = "Proportion with \ningested plastic") +
+  scale_size_continuous(breaks = seq(from = 1, to = 3, by = 1), 
+                        labels = c("Poorly studied (n=1)", "Moderately studied (n=2-3)", "Well studied (n>3)"),
+                        range = c(1.5, 5)) +
+  annotate("text", x = c(0.4, 2.8, 0.4, 2.8),
+           y=c(0.8, 0.8, 0.08, 0.08),
+           label = c("high incidence, data poor", "high incidence, data rich",
+                     "low incidence, data poor", "low incidence, data rich")) +
+  theme_classic(base_size = 16)
+risk_plot
+
+dev.copy2pdf(file="risk_plot.pdf", width=12, height=7)
+
+
+# Figure 3, plastic ingestion by depth and habitat ----
+
+p <- drop_na(d_full, trophic_level_via_fishbase, prop_w_plastic, N)
+
+p <-   ggplot(filter(d_full, order == "Perciformes"),
+    aes(trophic_level_via_fishbase, 
+             y = prop_w_plastic, 
+             size = N, 
+             weight = N)) + 
+  geom_point(alpha = 0.4) +  # Eventually add in foraging behavior here 
+  geom_smooth(method = "lm", se = FALSE) +
+  #geom_smooth(aes(color = source), method = "lm", se = FALSE) +
+  #xlim(2, 5) +
+  xlab("Trophic level") +
+  ylab("Proportion of individuals with ingested plastic") +
+  #facet_wrap(~order) +
+  # annotate("text", x = c(2.75, 4), y= -0.05,    # Comment out if faceting
+  #          label = c("planktivorous", "piscivorous")) +
+  theme_classic() +
+  theme(axis.text.x = element_text(size=12),
+        axis.text.y = element_text(size=12),
+        axis.title=element_text(size=13, face="bold")) 
+p + guides(size = FALSE)
 
 
 # old color palette: "steelblue4", "gray40", "coral", "coral1", "firebrick2", "firebrick3", "firebrick4"
@@ -689,6 +622,84 @@ study_hist <- d %>%
 study_hist 
 
 dev.copy2pdf(file="studies_by_year.pdf", width=12, height=8)
+
+
+
+# Figure S2, Species-level phylogeny ----
+
+# Phylogenetic tree figure for paper, Figure S1 ----
+
+# building the basic tree 
+
+breaks <- c(seq(1,nrow(d_sp_sum),50),nrow(d_sp_sum)+1)  # why are we doing this?
+
+for (i in 1:(length(breaks)-1)){
+  taxa <- as.character(d_sp_sum$binomial[breaks[i]:(breaks[i+1]-1)])
+  taxa <- taxa[taxa != "" & !is.na(taxa)]
+  
+  resolved_namest <- tnrs_match_names(taxa)                          # I think this is where all the extra species fall out
+  resolved_namest <- resolved_namest[!is.na(resolved_namest$unique_name),]
+  if (i==1){
+    resolved_namess <- resolved_namest
+  } else {
+    resolved_namess <- rbind(resolved_namess, resolved_namest)
+  }
+}
+resolved_names <- resolved_namess
+resolved_names <- resolved_names[resolved_names$flags!="INCERTAE_SEDIS_INHERITED",]
+
+#plots species
+my_tree <- tol_induced_subtree(ott_ids = resolved_names$ott_id, label_format = "name")
+
+my_tree$tip.label<-gsub("_"," ",my_tree$tip.label) # removes underscore between genus and species names
+my_tree$tip.label<-str_extract(my_tree$tip.label, "[A-Z][a-z]+ [a-z]+")
+
+my_tree <- compute.brlen(my_tree, method = "Grafen", power = 1/2) #add branch lengths to my tree using the Grafen (1989) method
+my_tree <- ladderize(my_tree, right = TRUE)
+
+#View(my_tree)
+
+#my_tree2 = phylo4d(my_tree, d_sp_sum)
+
+
+# first plot try, fan layout
+p <- ggtree(my_tree, layout="fan", open.angle=0) + 
+  #geom_text2(aes(label=label), hjust=-.2, size=4) +
+  ggplot2::xlim(-0.6, 1.3) 
+p
+
+my_tree$tip.label <- as.factor(my_tree$tip.label)
+
+# SUPPLEMENTAL PHYLOGENY FIGURE, ALL SPECIES ----
+p %<+% d_sp_sum + 
+  aes(color = Sp_mean) +
+  geom_tiplab2(aes(label = paste0("italic('", label, "')"),
+                   color=Sp_mean, angle = angle), parse = TRUE,
+               size = 6, align = FALSE, hjust = -0.05) +
+  geom_tippoint(aes(color = Sp_mean, shape = commercial, size = studies_cat)) +
+  scale_color_gradientn(colours = c("steelblue4",
+                                    "darkgoldenrod1",
+                                    "darkorange", "orangered1",
+                                    "firebrick1", "red3", "red4"),
+                        name = "Proportion with \ningested plastic") +
+  #scale_size(range = c(3, 7)) +
+  scale_size_continuous(guide = FALSE, range = c(3, 7)) +
+  scale_shape_discrete(na.translate = F) +
+  labs(shape = "Commercial \nstatus") +
+  theme(legend.position = c(0.5,0.5),
+        legend.key.size = unit(3.5, "cm"),
+        legend.text = element_text(size = 28),
+        legend.title = element_text(size = 30),
+        legend.box = "horizontal") +
+  guides(shape = guide_legend(override.aes = list(size = 5)))
+
+
+# save plots
+dev.copy2pdf(file="Fish_plastic_phylo_d_mp_subset.pdf", width=50, height=50)
+ggsave("Prelim_phylo_ggtree2.tiff", width = 42, height = 42, units = "in")
+ggsave("Prelim_phylo_ggtree2.eps", width = 45, height = 45, units = "in")
+ggsave("Prelim_phylo_ggtree2.jpg", width = 45, height = 45, units = "in")
+
 
 ######################################################### 
 # Modeling for fish-plastic ingestion meta-analysis paper
