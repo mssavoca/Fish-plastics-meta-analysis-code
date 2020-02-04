@@ -52,10 +52,15 @@ d = read_csv("Plastics ingestion records fish master_final.csv") %>%
          source = as_factor(source),
          family = ifelse(family == "Gasterostediae", "Gasterosteidae", 
                          ifelse(family == "Merluccidae", "Merlucciidae", family)))
-           
+
+# total plastic FO
+sum(d$NwP, na.rm = TRUE)/ sum(d$N, na.rm = TRUE)            
 
 d_full <- d %>%
-  filter(includes_microplastic == "Y")
+  filter(includes_microplastic == "Y") 
+
+# total plastic FO
+sum(d_full$NwP, na.rm = TRUE)/ sum(d_full$N, na.rm = TRUE) 
 
 
 # summary tables----
@@ -77,8 +82,8 @@ d_sp_sum <- d_full %>%
                                    Commercial = c("commercial", "highly commercial"),
                                    Minor = c("minor commercial", "subsistence"),
                                    None = "none")) %>%
-  filter(Sample_size < 25, Sp_mean <0.25) %>% 
-  arrange(-Sp_mean)
+ # filter(Sample_size < 25, Sp_mean <0.25) %>% 
+  arrange(Sample_size)
 
 
 
@@ -88,6 +93,7 @@ d_family_disc <- d %>%
   summarise(FO_plastic = sum(NwP, na.rm = TRUE)/sum(N, na.rm = TRUE),
             mean_num_plast = mean(mean_num_particles_per_indv, na.rm = TRUE),
             sample_size = sum(N, na.rm = TRUE),
+            num_sp = n_distinct(binomial), 
             num_studies = n_distinct(source)) %>% 
   arrange(desc(FO_plastic))
 write_csv(d_family_disc, "Fish families of concern.csv")
@@ -178,7 +184,7 @@ d_family <- d_full %>%
          commercial_cat = cut(prop_commercial,
                               breaks=c(-Inf, 0.01, 0.25, Inf), 
                               labels=c("None", "Minor", "Commercial"))) %>% 
-  filter(FO_plastic >0.25, sample_size >25, num_sp > 2, commercial_cat == "Commercial") %>% 
+  #filter(FO_plastic >0.25, sample_size >25, num_sp > 2, commercial_cat == "Commercial") %>% 
   arrange(desc(FO_plastic))
 
 
@@ -413,10 +419,14 @@ my_tree <- compute.brlen(my_tree, method = "Grafen", power = 1/2) #add branch le
 my_tree <- ladderize(my_tree, right = TRUE)
 
 # first plot try, fan layout
-p <- ggtree(my_tree, layout="fan", open.angle=0) +
+p <- ggtree(my_tree, layout="circular", open.angle=90) +
   #geom_text2(aes(label=label), hjust=-.2, size=4) +
+  geom_tiplab2(parse = TRUE,
+               size = 6,offset = 0.05) +
   ggplot2::xlim(-0.6, 1.3) 
 p
+
+dev.copy2pdf(file="test_phylo.pdf", width=20, height=20)
 
 # Adding data
 shapes <- c("None" = 15, "Minor" = 17, "Commercial" = 16)
@@ -431,7 +441,10 @@ p %<+% d_family +
                                     "darkorange", "orangered2", "red3", "red4"), 
                         name = "Proportion with \ningested plastic") +
   #scale_size(range = c(3, 7)) +
-  scale_size_continuous(guide = FALSE, range = c(3, 7)) +
+  #scale_size_continuous(guide = FALSE, range = c(3, 7)) +
+  scale_size_continuous(breaks = seq(from = 1, to = 3, by = 1), 
+                        labels = c("Poorly studied (n=1)", "Moderately studied (n=2-3)", "Well studied (n>3)"),
+                        range = c(3, 7)) +
   scale_shape_manual(na.translate = F, values = shapes) +
   labs(shape = "Commercial \nstatus") +
   theme(legend.position = c(0.49, 0.49),
@@ -439,12 +452,13 @@ p %<+% d_family +
         legend.text = element_text(size = 18),
         legend.title = element_text(size = 20),
         legend.box = "horizontal") +
-  guides(shape = guide_legend(override.aes = list(size = 5)))
+  guides(
+    size = FALSE, shape = FALSE, color  = FALSE
+    #shape = guide_legend(override.aes = list(size = 5))
+    )
 
-dev.copy2pdf(file="Fish_family_plastic_phylo_final.pdf", width=20, height=20)
-ggsave("Fish_family_plastic_phylo_final.jpg", width = 20, height = 20, units = "in")
-
-
+dev.copy2pdf(file="Fish_family_plastic_phylo_final_nolegend_new.pdf", width=20, height=20)
+ggsave("Fish_family_plastic_phylo_final_nolegend.jpg", width = 20, height = 20, units = "in")
 
 
 
@@ -472,7 +486,8 @@ risk_plot <- d_sp_sum %>%
            y=c(0.8, 0.8, 0.08, 0.08),
            label = c("high incidence, data poor", "high incidence, data rich",
                      "low incidence, data poor", "low incidence, data rich")) +
-  theme_classic(base_size = 16)
+  theme_classic(base_size = 16) +
+  guides(shape = guide_legend(override.aes = list(size = 3)))
 risk_plot
 
 dev.copy2pdf(file="risk_plot.pdf", width=12, height=7)
@@ -611,23 +626,24 @@ dev.copy2pdf(file="rarefaction_plot.pdf", width=8, height=8)
 
 # Figure S1, number of studies over time----
 study_hist <- d %>% 
-  group_by(publication_year) %>% 
+  group_by(publication_year, includes_microplastic) %>% 
   summarize(n_studies = n_distinct(source)) %>% 
   ggplot(aes(publication_year, n_studies)) + 
-  geom_bar(stat = "identity") + 
+  geom_bar(aes(fill = includes_microplastic), stat = "identity") + 
+  scale_fill_manual(labels = c("No", "Yes"), 
+                    values = c("tomato3", "gray28")) +
   geom_smooth(se = FALSE) +
-  theme_classic(base_size = 14) +
-  xlab("Publication year") + 
-  ylab("Number of studies") 
+  theme_classic(base_size = 18) +
+  labs(fill = "Recorded microplastics?",
+       x = "Publication year",
+       y = "Number of studies") 
 study_hist 
 
-dev.copy2pdf(file="studies_by_year.pdf", width=12, height=8)
+dev.copy2pdf(file="studies_by_year.pdf", width=12, height=7)
 
 
 
 # Figure S2, Species-level phylogeny ----
-
-# Phylogenetic tree figure for paper, Figure S1 ----
 
 # building the basic tree 
 
@@ -691,14 +707,17 @@ p %<+% d_sp_sum +
         legend.text = element_text(size = 28),
         legend.title = element_text(size = 30),
         legend.box = "horizontal") +
-  guides(shape = guide_legend(override.aes = list(size = 5)))
+  guides(
+    size = FALSE, shape = FALSE, color  = FALSE
+    #shape = guide_legend(override.aes = list(size = 5))
+  )
 
 
 # save plots
 dev.copy2pdf(file="Fish_plastic_phylo_d_mp_subset.pdf", width=50, height=50)
 ggsave("Prelim_phylo_ggtree2.tiff", width = 42, height = 42, units = "in")
 ggsave("Prelim_phylo_ggtree2.eps", width = 45, height = 45, units = "in")
-ggsave("Prelim_phylo_ggtree2.jpg", width = 45, height = 45, units = "in")
+ggsave("Fish_plastic_phylo_d_mp_subset_nolegend.pdf", width = 45, height = 45, units = "in")
 
 
 ######################################################### 
@@ -730,10 +749,10 @@ r.squaredGLMM(glmm_FwP_eco_geo_TL) # use R2c theoretical value, see: https://www
 dat <- ggpredict(glmm_FwP_eco_geo_TL, terms = "trophic_level_via_fishbase")
 plot(dat) +
   ggtitle("") +
-  xlab("Trophic level") +
+  xlab("Trophic level (scaled)") +
   ylab("Plastic ingestion incidence") +
-  ylim(0.15,0.6) +
-annotate("text", x = c(2.5, 4), y= 0.16, 
+  ylim(0.15,0.8) +
+annotate("text", x = c(-2, 1), y= 0.18, 
          label = c("planktivorous", "piscivorous"))
 
 dev.copy2pdf(file="TL_GLMM response.pdf", width=4.5, height=5)
@@ -743,7 +762,7 @@ plot(dat2) +
   ggtitle("") +
   xlab("Habitat") +
   ylab("Plastic ingestion incidence") +
-  ylim(0.1,0.6)
+  ylim(0.1,0.7)
 
 dev.copy2pdf(file="Found_GLMM response.pdf", width=4.5, height=5)
 
@@ -752,7 +771,7 @@ plot(dat2) +
   ggtitle("") +
   xlab("Proximity to continent") +
   ylab("Plastic ingestion incidence") +
-  ylim(0,0.6)
+  ylim(0,0.7)
 
 dev.copy2pdf(file="Adjacency_GLMM response.pdf", width=4.5, height=5)
 
@@ -771,7 +790,7 @@ plot_model(glmm_FwP_eco_geo_TL, sort.est = TRUE) +
                             "scale(trophic_level_via_fishbase)" = "trophic level",
                             "Founddemersal" = "habitat: demersal",
                             "adjacencyoceanic" = "proximity: oceanic"))
-dev.copy2pdf(file="Main effects TL_GLMM.pdf", width=7, height=4)
+dev.copy2pdf(file="Main effects TL_GLMM.pdf", width=8, height=4)
 
 # # plot main effects WOW
 # plot_model(glmm_FwP_eco_geo_TL, type = "eff", terms = "adjacency") +
@@ -783,12 +802,28 @@ dev.copy2pdf(file="Main effects TL_GLMM.pdf", width=7, height=4)
 # plot random effects WOW
 plot_model(glmm_FwP_eco_geo_TL, type = "re",
            grid = FALSE, 
+           sort.est = "sort.all")[[1]] +
+  ggtitle("") +
+  xlab("Reference") +
+  ylab("Random intercept") +
+  #ylim(0.1,10) +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.text.x = element_text(size = 16),
+        axis.title.x = element_text(size = 18),
+        axis.title.y = element_text(size = 18)) +
+  geom_hline(yintercept = 1)
+
+dev.copy2pdf(file="Random effect of source_GLMM.pdf", width=7, height=11)
+
+plot_model(glmm_FwP_eco_geo_TL, type = "re",
+           grid = FALSE, 
            sort.est = "sort.all")[[2]] +
   ggtitle("") +
   xlab("Order") +
   ylab("Random intercept") +
   #ylim(0.1,10) +
-  theme_bw() +
+  theme_bw(base_size = 20) +
   theme(plot.title = element_text(hjust = 0.5)) +
   geom_hline(yintercept = 1)
 
@@ -870,7 +905,7 @@ glm_FwP_eco_geo <- glm(cbind(NwP, N-NwP) ~ trophic_level_via_fishbase +
 summary(glm_FwP_eco_geo)
 
 # multi-model selection using AICc
-GLMM_dredge <- dredge(glmm_FwP_eco_geo)
+GLMM_dredge <- dredge(glmm_FwP_eco_geo_PF)
 
 View(GLMM_dredge)
 write_csv(GLMM_dredge, "GLMM model selection table.csv")
@@ -878,8 +913,6 @@ write_csv(GLMM_dredge, "GLMM model selection table.csv")
 a=model.avg(GLMM_dredge)
 summary(a) #The ‘subset’ (or ‘conditional’) average only averages over the models where the parameter appears. An alternative, the ‘full’ average assumes that a variable is included in every model
 confint(a) #computes confidence interval
-
-
 
 
 
